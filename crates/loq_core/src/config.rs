@@ -316,6 +316,33 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn default_config_has_expected_values() {
+        let config = LoqConfig::default();
+        assert_eq!(config.default_max_lines, Some(500));
+        assert!(config.respect_gitignore);
+        assert!(config.exclude.is_empty());
+        assert!(config.exempt.is_empty());
+        assert!(config.rules.is_empty());
+    }
+
+    #[test]
+    fn built_in_defaults_matches_default() {
+        let default = LoqConfig::default();
+        let built_in = LoqConfig::built_in_defaults();
+        assert_eq!(default.default_max_lines, built_in.default_max_lines);
+        assert_eq!(default.respect_gitignore, built_in.respect_gitignore);
+    }
+
+    #[test]
+    fn init_template_has_rules() {
+        let template = LoqConfig::init_template();
+        assert_eq!(template.default_max_lines, Some(500));
+        assert_eq!(template.rules.len(), 2);
+        assert_eq!(template.rules[0].path, "**/*.tsx");
+        assert_eq!(template.rules[1].path, "tests/**/*");
+    }
+
+    #[test]
     fn invalid_glob_reports_error() {
         let config = LoqConfig {
             default_max_lines: Some(1),

@@ -313,6 +313,14 @@ fn output_mode(cli: &Cli) -> OutputMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::ExitCode;
+
+    #[test]
+    fn exit_status_to_exit_code() {
+        assert_eq!(ExitCode::from(ExitStatus::Success), ExitCode::from(0));
+        assert_eq!(ExitCode::from(ExitStatus::Failure), ExitCode::from(1));
+        assert_eq!(ExitCode::from(ExitStatus::Error), ExitCode::from(2));
+    }
 
     struct FailingReader;
 

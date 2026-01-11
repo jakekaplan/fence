@@ -13,6 +13,35 @@ where
 }
 
 #[test]
+fn colorspec_helpers_build_correctly() {
+    let fg_spec = fg(Color::Red);
+    assert_eq!(fg_spec.fg(), Some(&Color::Red));
+    assert!(!fg_spec.bold());
+    assert!(!fg_spec.dimmed());
+
+    let bold_spec = bold();
+    assert!(bold_spec.bold());
+    assert!(bold_spec.fg().is_none());
+
+    let dimmed_spec = dimmed();
+    assert!(dimmed_spec.dimmed());
+    assert!(dimmed_spec.fg().is_none());
+}
+
+#[test]
+fn write_stat_line_singular() {
+    let out = output_string(|w| write_stat_line(w, "✔", Color::Green, 1, "Error"));
+    assert!(out.contains("1 Error"));
+    assert!(!out.contains("Errors"));
+}
+
+#[test]
+fn write_stat_line_plural() {
+    let out = output_string(|w| write_stat_line(w, "✔", Color::Green, 5, "Error"));
+    assert!(out.contains("5 Errors"));
+}
+
+#[test]
 fn severity_label_error() {
     assert_eq!(severity_label(Severity::Error), "error");
 }
