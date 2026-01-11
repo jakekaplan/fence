@@ -51,9 +51,8 @@ pub struct LoqConfig {
     pub rules: Vec<Rule>,
 }
 
-impl LoqConfig {
-    /// Returns the built-in defaults used when no config file is found.
-    pub fn built_in_defaults() -> Self {
+impl Default for LoqConfig {
+    fn default() -> Self {
         Self {
             default_max_lines: Some(500),
             respect_gitignore: true,
@@ -62,14 +61,17 @@ impl LoqConfig {
             rules: Vec::new(),
         }
     }
+}
+
+impl LoqConfig {
+    /// Returns the built-in defaults used when no config file is found.
+    pub fn built_in_defaults() -> Self {
+        Self::default()
+    }
 
     /// Returns a template config for `loq init`.
     pub fn init_template() -> Self {
         Self {
-            default_max_lines: Some(500),
-            respect_gitignore: true,
-            exclude: Vec::new(),
-            exempt: Vec::new(),
             rules: vec![
                 Rule {
                     path: "**/*.tsx".to_string(),
@@ -82,6 +84,7 @@ impl LoqConfig {
                     severity: Severity::Error,
                 },
             ],
+            ..Self::default()
         }
     }
 }

@@ -260,10 +260,11 @@ fn write_summary_single_file() {
 }
 
 #[test]
-fn print_error_returns_exit_code() {
+fn print_error_returns_error_status() {
+    use crate::ExitStatus;
     let mut buf = NoColor::new(Vec::new());
-    let code = print_error(&mut buf, "something went wrong");
-    assert_eq!(code, 2);
+    let status = print_error(&mut buf, "something went wrong");
+    assert_eq!(status, ExitStatus::Error);
     let out = String::from_utf8(buf.into_inner()).unwrap();
     assert!(out.contains("error:"));
     assert!(out.contains("something went wrong"));

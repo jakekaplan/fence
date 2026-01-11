@@ -5,6 +5,24 @@ use loq_core::{ConfigOrigin, Severity};
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
+fn fg(color: Color) -> ColorSpec {
+    let mut spec = ColorSpec::new();
+    spec.set_fg(Some(color));
+    spec
+}
+
+fn bold() -> ColorSpec {
+    let mut spec = ColorSpec::new();
+    spec.set_bold(true);
+    spec
+}
+
+fn dimmed() -> ColorSpec {
+    let mut spec = ColorSpec::new();
+    spec.set_dimmed(true);
+    spec
+}
+
 pub fn severity_label(severity: Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
@@ -18,9 +36,7 @@ pub fn write_line<W: WriteColor>(
     line: &str,
 ) -> io::Result<()> {
     if let Some(color) = color {
-        let mut spec = ColorSpec::new();
-        spec.set_fg(Some(color));
-        writer.set_color(&spec)?;
+        writer.set_color(&fg(color))?;
     }
     writeln!(writer, "{line}")?;
     writer.reset()?;
@@ -43,28 +59,20 @@ pub fn write_finding<W: WriteColor>(
     };
 
     // Line 1: symbol + path (directory dimmed, filename bold)
-    let mut spec = ColorSpec::new();
-    spec.set_fg(Some(color));
-    writer.set_color(&spec)?;
+    writer.set_color(&fg(color))?;
     write!(writer, "{symbol}  ")?;
     writer.reset()?;
 
     let path = &finding.path;
     if let Some(pos) = path.rfind('/') {
         let (dir, file) = path.split_at(pos + 1);
-        spec.set_dimmed(true);
-        spec.set_fg(None);
-        writer.set_color(&spec)?;
+        writer.set_color(&dimmed())?;
         write!(writer, "{dir}")?;
         writer.reset()?;
-        spec.set_dimmed(false);
-        spec.set_bold(true);
-        writer.set_color(&spec)?;
+        writer.set_color(&bold())?;
         writeln!(writer, "{file}")?;
     } else {
-        spec.set_bold(true);
-        spec.set_fg(None);
-        writer.set_color(&spec)?;
+        writer.set_color(&bold())?;
         writeln!(writer, "{path}")?;
     }
     writer.reset()?;
@@ -80,17 +88,12 @@ pub fn write_finding<W: WriteColor>(
         } => {
             let over = over_by.unwrap_or(0);
             write!(writer, "   {} lines   ", format_number(*actual))?;
-            spec.set_fg(Some(color));
-            spec.set_bold(false);
-            writer.set_color(&spec)?;
+            writer.set_color(&fg(color))?;
             writeln!(writer, "(+{} over limit)", format_number(over))?;
             writer.reset()?;
 
-            // Verbose: tree structure with rule and config
             if verbose {
-                spec.set_dimmed(true);
-                writer.set_color(&spec)?;
-
+                writer.set_color(&dimmed())?;
                 let rule_str = match matched_by {
                     loq_core::MatchBy::Rule { pattern } => {
                         format!(
@@ -109,24 +112,25 @@ pub fn write_finding<W: WriteColor>(
                     }
                 };
                 writeln!(writer, "   ├─ rule:   {rule_str}")?;
-
-                let config_str = relative_config_path(&finding.config_source);
-                writeln!(writer, "   └─ config: {config_str}")?;
+                writeln!(
+                    writer,
+                    "   └─ config: {}",
+                    relative_config_path(&finding.config_source)
+                )?;
                 writer.reset()?;
             }
         }
         FindingKind::SkipWarning { reason } => {
-            let msg: std::borrow::Cow<'static, str> = match reason {
-                SkipReason::Binary => "binary file skipped".into(),
-                SkipReason::Unreadable(e) => format!("unreadable: {e}").into(),
-                SkipReason::Missing => "file not found".into(),
+            let msg = match reason {
+                SkipReason::Binary => "binary file skipped",
+                SkipReason::Unreadable(e) => return writeln!(writer, "   unreadable: {e}\n"),
+                SkipReason::Missing => "file not found",
             };
             writeln!(writer, "   {msg}")?;
         }
     }
 
-    writeln!(writer)?; // blank line between findings
-    Ok(())
+    writeln!(writer)
 }
 
 fn relative_config_path(origin: &ConfigOrigin) -> String {
@@ -169,22 +173,15 @@ pub fn write_block<W: WriteColor>(
 }
 
 pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
-    let mut spec = ColorSpec::new();
     let violations = summary.errors + summary.warnings;
+    let total = summary.passed + violations;
 
-    // Header line
     if violations > 0 {
-        let files_word = if summary.passed + violations == 1 {
-            "file"
-        } else {
-            "files"
-        };
+        let files_word = if total == 1 { "file" } else { "files" };
         writeln!(
             writer,
-            "Found {} violations in {} checked {}.",
-            violations,
-            format_number(summary.passed + violations),
-            files_word
+            "Found {violations} violations in {} checked {files_word}.",
+            format_number(total)
         )?;
     } else {
         writeln!(
@@ -195,57 +192,33 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
     }
     writeln!(writer)?;
 
-    // Errors line
-    spec.set_fg(Some(Color::Red));
-    writer.set_color(&spec)?;
-    write!(writer, "  ✖  ")?;
-    writer.reset()?;
-    let error_label = if summary.errors == 1 {
-        "Error"
-    } else {
-        "Errors"
-    };
-    writeln!(writer, "{} {}", format_number(summary.errors), error_label)?;
-
-    // Warnings line
-    spec.set_fg(Some(Color::Yellow));
-    writer.set_color(&spec)?;
-    write!(writer, "  ⚠  ")?;
-    writer.reset()?;
-    let warning_label = if summary.warnings == 1 {
-        "Warning"
-    } else {
-        "Warnings"
-    };
-    writeln!(
-        writer,
-        "{} {}",
-        format_number(summary.warnings),
-        warning_label
-    )?;
-
-    // Passed line
-    spec.set_fg(Some(Color::Green));
-    writer.set_color(&spec)?;
-    write!(writer, "  ✔  ")?;
-    writer.reset()?;
-    writeln!(writer, "{} Passed", format_number(summary.passed))?;
-
+    write_stat_line(writer, "✖", Color::Red, summary.errors, "Error")?;
+    write_stat_line(writer, "⚠", Color::Yellow, summary.warnings, "Warning")?;
+    write_stat_line(writer, "✔", Color::Green, summary.passed, "Passed")?;
     writeln!(writer)?;
 
-    // Footer (dimmed)
-    spec.set_dimmed(true);
-    spec.set_fg(None);
-    writer.set_color(&spec)?;
+    writer.set_color(&dimmed())?;
     writeln!(writer, "  Time: {}ms", summary.duration_ms)?;
-    writer.reset()?;
-
-    Ok(())
+    writer.reset()
 }
 
-pub fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> i32 {
+fn write_stat_line<W: WriteColor>(
+    writer: &mut W,
+    symbol: &str,
+    color: Color,
+    count: usize,
+    label: &str,
+) -> io::Result<()> {
+    writer.set_color(&fg(color))?;
+    write!(writer, "  {symbol}  ")?;
+    writer.reset()?;
+    let plural = if count == 1 { "" } else { "s" };
+    writeln!(writer, "{} {label}{plural}", format_number(count))
+}
+
+pub fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> crate::ExitStatus {
     let _ = write_line(stderr, Some(Color::Red), &format!("error: {message}"));
-    2
+    crate::ExitStatus::Error
 }
 
 pub fn write_walk_errors<W: WriteColor>(
@@ -253,10 +226,7 @@ pub fn write_walk_errors<W: WriteColor>(
     errors: &[WalkError],
     verbose: bool,
 ) -> io::Result<()> {
-    let mut spec = ColorSpec::new();
-    spec.set_dimmed(true);
-    writer.set_color(&spec)?;
-
+    writer.set_color(&dimmed())?;
     if verbose {
         writeln!(writer, "Skipped paths ({}):", errors.len())?;
         for error in errors {
@@ -269,9 +239,7 @@ pub fn write_walk_errors<W: WriteColor>(
             errors.len()
         )?;
     }
-
-    writer.reset()?;
-    Ok(())
+    writer.reset()
 }
 
 #[cfg(test)]

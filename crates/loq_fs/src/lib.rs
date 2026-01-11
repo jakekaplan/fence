@@ -162,70 +162,62 @@ fn check_file(
         .to_string();
     let config_source = compiled.origin.clone();
 
-    if compiled.respect_gitignore {
-        if let Some(gitignore) = gitignore {
-            if is_gitignored(gitignore, path, cwd) {
-                return FileOutcome {
-                    path: path.to_path_buf(),
-                    display_path,
-                    config_source,
-                    kind: OutcomeKind::Excluded {
-                        pattern: ".gitignore".to_string(),
-                    },
-                };
-            }
-        }
+    let make_outcome = |kind| FileOutcome {
+        path: path.to_path_buf(),
+        display_path: display_path.clone(),
+        config_source: config_source.clone(),
+        kind,
+    };
+
+    // Check gitignore first
+    if compiled.respect_gitignore && gitignore.is_some_and(|gi| is_gitignored(gi, path, cwd)) {
+        return make_outcome(OutcomeKind::Excluded {
+            pattern: ".gitignore".to_string(),
+        });
     }
 
     let relative =
         pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
 
-    let decision = decide(compiled, &relative_str);
-
-    let kind = match &decision {
-        Decision::Excluded { pattern } => OutcomeKind::Excluded {
-            pattern: pattern.clone(),
-        },
-        Decision::Exempt { pattern } => OutcomeKind::Exempt {
-            pattern: pattern.clone(),
-        },
+    let kind = match decide(compiled, &relative_str) {
+        Decision::Excluded { pattern } => OutcomeKind::Excluded { pattern },
+        Decision::Exempt { pattern } => OutcomeKind::Exempt { pattern },
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check {
             limit,
             severity,
             matched_by,
-        } => match count::inspect_file(path) {
-            Ok(count::FileInspection::Binary) => OutcomeKind::Binary,
-            Ok(count::FileInspection::Text { lines }) => {
-                if lines > *limit {
-                    OutcomeKind::Violation {
-                        limit: *limit,
-                        actual: lines,
-                        severity: *severity,
-                        matched_by: matched_by.clone(),
-                    }
-                } else {
-                    OutcomeKind::Pass {
-                        limit: *limit,
-                        actual: lines,
-                        severity: *severity,
-                        matched_by: matched_by.clone(),
-                    }
-                }
-            }
-            Err(count::CountError::Missing) => OutcomeKind::Missing,
-            Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
-                error: error.to_string(),
-            },
-        },
+        } => check_file_lines(path, limit, severity, matched_by),
     };
 
-    FileOutcome {
-        path: path.to_path_buf(),
-        display_path,
-        config_source,
-        kind,
+    make_outcome(kind)
+}
+
+fn check_file_lines(
+    path: &Path,
+    limit: usize,
+    severity: loq_core::Severity,
+    matched_by: loq_core::MatchBy,
+) -> OutcomeKind {
+    match count::inspect_file(path) {
+        Ok(count::FileInspection::Binary) => OutcomeKind::Binary,
+        Ok(count::FileInspection::Text { lines }) if lines > limit => OutcomeKind::Violation {
+            limit,
+            actual: lines,
+            severity,
+            matched_by,
+        },
+        Ok(count::FileInspection::Text { lines }) => OutcomeKind::Pass {
+            limit,
+            actual: lines,
+            severity,
+            matched_by,
+        },
+        Err(count::CountError::Missing) => OutcomeKind::Missing,
+        Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
+            error: error.to_string(),
+        },
     }
 }
 

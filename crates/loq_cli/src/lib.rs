@@ -9,8 +9,10 @@ mod cli;
 mod output;
 
 use std::ffi::OsString;
+use std::fmt::Write as _;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
@@ -22,12 +24,31 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
 
+/// Exit status for the CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitStatus {
+    /// All checks passed.
+    Success,
+    /// Violations found (errors).
+    Failure,
+    /// Runtime error occurred.
+    Error,
+}
+
+impl From<ExitStatus> for ExitCode {
+    fn from(status: ExitStatus) -> Self {
+        match status {
+            ExitStatus::Success => ExitCode::from(0),
+            ExitStatus::Failure => ExitCode::from(1),
+            ExitStatus::Error => ExitCode::from(2),
+        }
+    }
+}
+
 pub use cli::{Cli, Command};
 
 /// Runs the CLI using environment args and stdio.
-///
-/// Returns the exit code (0 for success, 1 for violations, 2 for errors).
-pub fn run_env() -> i32 {
+pub fn run_env() -> ExitStatus {
     let args = std::env::args_os();
     let stdin = io::stdin();
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
@@ -36,7 +57,7 @@ pub fn run_env() -> i32 {
 }
 
 /// Runs the CLI with custom args and streams (for testing).
-pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &mut W2) -> i32
+pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &mut W2) -> ExitStatus
 where
     I: IntoIterator<Item = OsString>,
     R: Read,
@@ -46,26 +67,23 @@ where
     let cli = Cli::parse_from(args);
     let mode = output_mode(&cli);
 
-    let command = cli
-        .command
-        .clone()
-        .unwrap_or(Command::Check(cli::CheckArgs { paths: vec![] }));
-    match command {
+    let default_check = Command::Check(cli::CheckArgs { paths: vec![] });
+    match cli.command.as_ref().unwrap_or(&default_check) {
         Command::Check(args) => run_check(args, &cli, &mut stdin, stdout, stderr, mode),
-        Command::Init(args) => run_init(args, &cli, stdout, stderr),
+        Command::Init(args) => run_init(args, stdout, stderr),
     }
 }
 
 fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
-    args: cli::CheckArgs,
+    args: &cli::CheckArgs,
     cli: &Cli,
     stdin: &mut R,
     stdout: &mut W1,
     stderr: &mut W2,
     mode: OutputMode,
-) -> i32 {
+) -> ExitStatus {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let inputs = match collect_inputs(args.paths, stdin, &cwd) {
+    let inputs = match collect_inputs(args.paths.clone(), stdin, &cwd) {
         Ok(paths) => paths,
         Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
@@ -85,10 +103,10 @@ fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     handle_check_output(output, duration_ms, stdout, mode)
 }
 
-fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> i32 {
+fn handle_fs_error<W: WriteColor>(err: FsError, stderr: &mut W) -> ExitStatus {
     let message = format!("error: {err}");
     let _ = write_block(stderr, Some(Color::Red), &message);
-    2
+    ExitStatus::Error
 }
 
 fn handle_check_output<W: WriteColor>(
@@ -96,7 +114,7 @@ fn handle_check_output<W: WriteColor>(
     duration_ms: u128,
     stdout: &mut W,
     mode: OutputMode,
-) -> i32 {
+) -> ExitStatus {
     output
         .outcomes
         .sort_by(|a, b| a.display_path.cmp(&b.display_path));
@@ -116,7 +134,7 @@ fn handle_check_output<W: WriteColor>(
                 }
             }
         }
-        _ => {
+        OutputMode::Default | OutputMode::Verbose => {
             let verbose = mode == OutputMode::Verbose;
             for finding in &report.findings {
                 if !verbose && matches!(finding.kind, FindingKind::SkipWarning { .. }) {
@@ -126,7 +144,6 @@ fn handle_check_output<W: WriteColor>(
             }
             let _ = write_summary(stdout, &report.summary);
 
-            // Show walk errors if any
             if !output.walk_errors.is_empty() {
                 let _ = write_walk_errors(stdout, &output.walk_errors, verbose);
             }
@@ -134,9 +151,9 @@ fn handle_check_output<W: WriteColor>(
     }
 
     if report.summary.errors > 0 {
-        1
+        ExitStatus::Failure
     } else {
-        0
+        ExitStatus::Success
     }
 }
 
@@ -169,11 +186,10 @@ fn collect_inputs<R: Read>(
 }
 
 fn run_init<W1: WriteColor, W2: WriteColor>(
-    args: cli::InitArgs,
-    _cli: &Cli,
+    args: &cli::InitArgs,
     stdout: &mut W1,
     stderr: &mut W2,
-) -> i32 {
+) -> ExitStatus {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let path = cwd.join("loq.toml");
     if path.exists() {
@@ -194,7 +210,7 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
     }
 
     let _ = std::io::Write::flush(stdout);
-    0
+    ExitStatus::Success
 }
 
 fn baseline_config(cwd: &Path) -> Result<String> {
@@ -234,39 +250,44 @@ fn baseline_config(cwd: &Path) -> Result<String> {
 }
 
 fn default_config_text(exempt: &[String]) -> String {
-    let mut output = String::new();
-    output.push_str("default_max_lines = 500\n\n");
-    output.push_str("respect_gitignore = true\n\n");
+    let mut out = String::new();
     let exclude = loq_core::LoqConfig::init_template().exclude;
-    if exclude.is_empty() {
-        output.push_str("exclude = []\n\n");
-    } else {
-        output.push_str("exclude = [\n");
-        for pattern in exclude {
-            output.push_str(&format!("  \"{pattern}\",\n"));
-        }
-        output.push_str("]\n\n");
-    }
 
-    if exempt.is_empty() {
-        output.push_str("exempt = []\n\n");
-    } else {
-        output.push_str("exempt = [\n");
-        for path in exempt {
-            output.push_str(&format!("  \"{path}\",\n"));
-        }
-        output.push_str("]\n\n");
-    }
+    writeln!(out, "default_max_lines = 500").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "respect_gitignore = true").unwrap();
+    writeln!(out).unwrap();
 
-    output.push_str("# Last match wins. Put general rules first and overrides later.\n");
-    output.push_str("[[rules]]\n");
-    output.push_str("path = \"**/*.tsx\"\n");
-    output.push_str("max_lines = 300\n");
-    output.push_str("severity = \"warning\"\n\n");
-    output.push_str("[[rules]]\n");
-    output.push_str("path = \"tests/**/*\"\n");
-    output.push_str("max_lines = 500\n");
-    output
+    write_toml_array(&mut out, "exclude", &exclude);
+    write_toml_array(&mut out, "exempt", exempt);
+
+    writeln!(
+        out,
+        "# Last match wins. Put general rules first and overrides later."
+    )
+    .unwrap();
+    writeln!(out, "[[rules]]").unwrap();
+    writeln!(out, "path = \"**/*.tsx\"").unwrap();
+    writeln!(out, "max_lines = 300").unwrap();
+    writeln!(out, "severity = \"warning\"").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "[[rules]]").unwrap();
+    writeln!(out, "path = \"tests/**/*\"").unwrap();
+    write!(out, "max_lines = 500").unwrap();
+    out
+}
+
+fn write_toml_array(out: &mut String, name: &str, items: &[String]) {
+    if items.is_empty() {
+        writeln!(out, "{name} = []").unwrap();
+    } else {
+        writeln!(out, "{name} = [").unwrap();
+        for item in items {
+            writeln!(out, "  \"{item}\",").unwrap();
+        }
+        writeln!(out, "]").unwrap();
+    }
+    writeln!(out).unwrap();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -365,12 +386,12 @@ mod tests {
     }
 
     #[test]
-    fn handle_fs_error_returns_exit_code_2() {
+    fn handle_fs_error_returns_error_status() {
         use termcolor::NoColor;
         let mut stderr = NoColor::new(Vec::new());
         let err = FsError::Io(std::io::Error::other("test error"));
-        let code = handle_fs_error(err, &mut stderr);
-        assert_eq!(code, 2);
+        let status = handle_fs_error(err, &mut stderr);
+        assert_eq!(status, ExitStatus::Error);
         let output = String::from_utf8(stderr.into_inner()).unwrap();
         assert!(output.contains("error:"));
     }
@@ -383,8 +404,8 @@ mod tests {
             outcomes: vec![],
             walk_errors: vec![],
         };
-        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Silent);
-        assert_eq!(code, 0);
+        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Silent);
+        assert_eq!(status, ExitStatus::Success);
         assert!(stdout.into_inner().is_empty());
     }
 
@@ -422,12 +443,10 @@ mod tests {
             ],
             walk_errors: vec![],
         };
-        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Quiet);
-        assert_eq!(code, 1);
+        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Quiet);
+        assert_eq!(status, ExitStatus::Failure);
         let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        // Should show error violation
         assert!(output_str.contains("error.txt"));
-        // Should NOT show warning in quiet mode
         assert!(!output_str.contains("warning.txt"));
     }
 
@@ -447,10 +466,9 @@ mod tests {
             }],
             walk_errors: vec![],
         };
-        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
-        assert_eq!(code, 0);
+        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Default);
+        assert_eq!(status, ExitStatus::Success);
         let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        // Skip warnings are hidden in default mode
         assert!(!output_str.contains("missing.txt") || output_str.contains("passed"));
     }
 
@@ -470,10 +488,9 @@ mod tests {
             }],
             walk_errors: vec![],
         };
-        let code = handle_check_output(output, 0, &mut stdout, OutputMode::Verbose);
-        assert_eq!(code, 0);
+        let status = handle_check_output(output, 0, &mut stdout, OutputMode::Verbose);
+        assert_eq!(status, ExitStatus::Success);
         let output_str = String::from_utf8(stdout.into_inner()).unwrap();
-        // Verbose mode shows skip warnings
         assert!(output_str.contains("missing.txt"));
     }
 
