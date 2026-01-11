@@ -1,6 +1,13 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+use insta::assert_snapshot;
 use predicates::prelude::*;
+use regex::Regex;
 use tempfile::TempDir;
+
+fn normalize_output(output: &str) -> String {
+    let re = Regex::new(r"Time: \d+ms").unwrap();
+    re.replace_all(output, "Time: <TIME>ms").to_string()
+}
 
 fn write_file(dir: &TempDir, path: &str, contents: &str) {
     let full = dir.path().join(path);
@@ -318,4 +325,56 @@ fn verbose_shows_builtin_config_source() {
         .assert()
         .failure()
         .stdout(predicate::str::contains("<built-in>"));
+}
+
+// =============================================================================
+// Snapshot tests - verify exact output format
+// =============================================================================
+
+#[test]
+fn snapshot_single_error() {
+    let output = cargo_bin_cmd!("loq")
+        .args(["check", "tests/fixtures/single_error"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_snapshot!(normalize_output(&stdout));
+}
+
+#[test]
+fn snapshot_mixed_results() {
+    let output = cargo_bin_cmd!("loq")
+        .args(["check", "tests/fixtures/mixed_results"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_snapshot!(normalize_output(&stdout));
+}
+
+#[test]
+fn snapshot_nested_path() {
+    let output = cargo_bin_cmd!("loq")
+        .args(["check", "tests/fixtures/nested_path"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_snapshot!(normalize_output(&stdout));
+}
+
+#[test]
+fn snapshot_verbose_output() {
+    let output = cargo_bin_cmd!("loq")
+        .args(["--verbose", "check", "tests/fixtures/single_error"])
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_snapshot!(normalize_output(&stdout));
 }

@@ -59,21 +59,20 @@ pub struct CheckOutput {
 }
 
 fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
-    let config_path = path.canonicalize().unwrap_or(path);
-    let root_dir = config_path
+    let root_dir = path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| fallback_cwd.to_path_buf());
-    let text = std::fs::read_to_string(&config_path).map_err(|error| FsError::ConfigRead {
-        path: config_path.clone(),
+    let text = std::fs::read_to_string(&path).map_err(|error| FsError::ConfigRead {
+        path: path.clone(),
         error,
     })?;
-    let config = loq_core::parse_config(&config_path, &text)?;
+    let config = loq_core::parse_config(&path, &text)?;
     let compiled = compile_config(
-        ConfigOrigin::File(config_path.clone()),
+        ConfigOrigin::File(path.clone()),
         root_dir,
         config,
-        Some(&config_path),
+        Some(&path),
     )?;
     Ok(compiled)
 }
@@ -157,8 +156,7 @@ fn check_file(
     cwd: &Path,
     gitignore: Option<&Gitignore>,
 ) -> FileOutcome {
-    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let display_path = pathdiff::diff_paths(&canonical_path, cwd)
+    let display_path = pathdiff::diff_paths(path, cwd)
         .unwrap_or_else(|| path.to_path_buf())
         .to_string_lossy()
         .to_string();
@@ -166,7 +164,7 @@ fn check_file(
 
     if compiled.respect_gitignore {
         if let Some(gitignore) = gitignore {
-            if is_gitignored(gitignore, &canonical_path, cwd) {
+            if is_gitignored(gitignore, path, cwd) {
                 return FileOutcome {
                     path: path.to_path_buf(),
                     display_path,
@@ -179,8 +177,8 @@ fn check_file(
         }
     }
 
-    let relative = pathdiff::diff_paths(&canonical_path, &compiled.root_dir)
-        .unwrap_or_else(|| path.to_path_buf());
+    let relative =
+        pathdiff::diff_paths(path, &compiled.root_dir).unwrap_or_else(|| path.to_path_buf());
     let relative_str = normalize_path(&relative);
 
     let decision = decide(compiled, &relative_str);
@@ -250,7 +248,8 @@ fn load_gitignore(root: &Path) -> Result<Option<Gitignore>, FsError> {
 
 fn is_gitignored(gitignore: &Gitignore, path: &Path, root: &Path) -> bool {
     let relative = pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf());
-    let matched = gitignore.matched_path_or_any_parents(&relative, path.is_dir());
+    // We know path is a file (from walker), so pass false instead of calling is_dir()
+    let matched = gitignore.matched_path_or_any_parents(&relative, false);
     matched.is_ignore() && !matched.is_whitelist()
 }
 
