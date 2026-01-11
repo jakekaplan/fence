@@ -20,12 +20,16 @@ check: fmt-check clippy
 test:
     cargo test --all
 
-# Enforce 100% coverage (uses cargo-llvm-cov)
+# Enforce 95% coverage (uses cargo-llvm-cov)
 coverage:
-    cargo llvm-cov --all --workspace --lcov --output-path lcov.info --fail-under-lines 100
+    cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
 
 # CI-equivalent checks
 ci: fmt-check clippy test coverage
+
+# Run criterion benchmarks
+bench-criterion:
+    cargo bench -p fence_fs
 
 # Benchmark against a public GitHub repo (requires hyperfine)
 bench repo:

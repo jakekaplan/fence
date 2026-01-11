@@ -1,20 +1,34 @@
+//! Configuration file discovery.
+//!
+//! Finds `.fence.toml` files by walking up the directory tree.
+//! Results are cached for performance when checking many files.
+
 use std::path::{Path, PathBuf};
 
 use rustc_hash::FxHashMap;
 
 use crate::FsError;
 
+/// Cached config file discovery.
+///
+/// Caches the results of searching for `.fence.toml` files to avoid
+/// repeated filesystem lookups when checking many files in the same tree.
 pub struct ConfigDiscovery {
     cache: FxHashMap<PathBuf, Option<PathBuf>>,
 }
 
 impl ConfigDiscovery {
+    /// Creates a new discovery instance with an empty cache.
     pub fn new() -> Self {
         Self {
             cache: FxHashMap::default(),
         }
     }
 
+    /// Finds a config file in or above the given directory.
+    ///
+    /// Searches upward from `dir` looking for `.fence.toml`.
+    /// Results are cached for subsequent lookups.
     pub fn find_in_dir(&mut self, dir: &Path) -> Result<Option<PathBuf>, FsError> {
         if let Some(cached) = self.cache.get(dir) {
             return Ok(cached.clone());
@@ -42,6 +56,9 @@ impl Default for ConfigDiscovery {
     }
 }
 
+/// Finds the config file applicable to a given file path.
+///
+/// Looks for `.fence.toml` starting from the file's parent directory.
 pub fn find_config(
     path: &Path,
     discovery: &mut ConfigDiscovery,

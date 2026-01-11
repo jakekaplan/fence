@@ -1,86 +1,147 @@
+//! Outcome aggregation and report generation.
+//!
+//! Collects file check outcomes and generates structured reports
+//! with findings sorted by severity.
+
 use crate::config::{ConfigOrigin, Severity};
 use crate::decide::MatchBy;
 
+/// The result of checking a single file.
 #[derive(Debug, Clone)]
 pub struct FileOutcome {
+    /// Absolute path to the file.
     pub path: std::path::PathBuf,
+    /// Path relative to working directory for display.
     pub display_path: String,
+    /// Which config was used for this file.
     pub config_source: ConfigOrigin,
+    /// What happened when checking the file.
     pub kind: OutcomeKind,
 }
 
+/// What happened when checking a file.
 #[derive(Debug, Clone)]
 pub enum OutcomeKind {
+    /// File was excluded by pattern.
     Excluded {
+        /// The pattern that matched.
         pattern: String,
     },
+    /// File was exempted by pattern.
     Exempt {
+        /// The pattern that matched.
         pattern: String,
     },
+    /// No limit configured for this file.
     NoLimit,
+    /// File does not exist.
     Missing,
+    /// File could not be read.
     Unreadable {
+        /// The error message.
         error: String,
     },
+    /// File appears to be binary (contains null bytes).
     Binary,
+    /// File exceeds its line limit.
     Violation {
+        /// The configured limit.
         limit: usize,
+        /// Actual line count.
         actual: usize,
+        /// Severity of the violation.
         severity: Severity,
+        /// How the limit was determined.
         matched_by: MatchBy,
     },
+    /// File is within its line limit.
     Pass {
+        /// The configured limit.
         limit: usize,
+        /// Actual line count.
         actual: usize,
+        /// Severity that would apply if over.
         severity: Severity,
+        /// How the limit was determined.
         matched_by: MatchBy,
     },
 }
 
+/// Why a file was skipped (for warnings).
 #[derive(Debug, Clone)]
 pub enum SkipReason {
+    /// Binary file (contains null bytes).
     Binary,
+    /// Could not read the file.
     Unreadable(String),
+    /// File does not exist.
     Missing,
 }
 
+/// A reportable finding (violation or skip warning).
 #[derive(Debug, Clone)]
 pub enum FindingKind {
+    /// File exceeded its line limit.
     Violation {
+        /// Severity of the violation.
         severity: Severity,
+        /// The configured limit.
         limit: usize,
+        /// Actual line count.
         actual: usize,
+        /// How many lines over the limit.
         over_by: usize,
+        /// How the limit was determined.
         matched_by: MatchBy,
     },
+    /// File was skipped with a warning.
     SkipWarning {
+        /// Why the file was skipped.
         reason: SkipReason,
     },
 }
 
+/// A single finding to report.
 #[derive(Debug, Clone)]
 pub struct Finding {
+    /// Display path for the file.
     pub path: String,
+    /// Which config was used.
     pub config_source: ConfigOrigin,
+    /// What kind of finding this is.
     pub kind: FindingKind,
 }
 
+/// Summary statistics for a check run.
 #[derive(Debug, Clone, Default)]
 pub struct Summary {
+    /// Total files processed.
     pub total: usize,
+    /// Files skipped (excluded, exempt, no limit, etc.).
     pub skipped: usize,
+    /// Files that passed their limit.
     pub passed: usize,
+    /// Files with error-severity violations.
     pub errors: usize,
+    /// Files with warning-severity violations.
     pub warnings: usize,
+    /// Time taken in milliseconds.
     pub duration_ms: u128,
 }
 
+/// The complete report from a check run.
 #[derive(Debug, Clone)]
 pub struct Report {
+    /// All findings, sorted by severity.
     pub findings: Vec<Finding>,
+    /// Summary statistics.
     pub summary: Summary,
 }
 
+/// Builds a report from file outcomes.
+///
+/// Aggregates outcomes into findings and summary statistics.
+/// Findings are sorted by severity (skip warnings, then warnings, then errors).
 pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
     let mut findings = Vec::new();
     let mut summary = Summary {
@@ -158,6 +219,9 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
     Report { findings, summary }
 }
 
+/// Sorts findings by severity (skip warnings first, errors last).
+///
+/// Within each severity, violations are sorted by how much they're over the limit.
 pub fn sort_findings(findings: &mut [Finding]) {
     findings.sort_by(|a, b| {
         let rank_a = finding_rank(&a.kind);

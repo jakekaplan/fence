@@ -1,4 +1,9 @@
+//! Command-line interface for fence.
+//!
+//! Provides the main entry point and CLI argument handling for the fence tool.
+
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 mod cli;
 mod output;
@@ -18,6 +23,9 @@ use output::{print_error, write_block, write_finding, write_summary, write_walk_
 
 pub use cli::{Cli, Command};
 
+/// Runs the CLI using environment args and stdio.
+///
+/// Returns the exit code (0 for success, 1 for violations, 2 for errors).
 pub fn run_env() -> i32 {
     let args = std::env::args_os();
     let stdin = io::stdin();
@@ -26,6 +34,7 @@ pub fn run_env() -> i32 {
     run_with(args, stdin.lock(), &mut stdout, &mut stderr)
 }
 
+/// Runs the CLI with custom args and streams (for testing).
 pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &mut W2) -> i32
 where
     I: IntoIterator<Item = OsString>,

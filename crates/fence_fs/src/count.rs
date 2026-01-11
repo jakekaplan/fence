@@ -1,3 +1,8 @@
+//! Line counting with binary detection.
+//!
+//! Efficiently counts lines in files using buffered reads and SIMD-accelerated
+//! newline detection. Detects binary files by checking for null bytes.
+
 use std::fs::File;
 use std::io::{Read, Result as IoResult};
 use std::path::Path;
@@ -5,20 +10,33 @@ use std::path::Path;
 use memchr::{memchr, memchr_iter};
 use thiserror::Error;
 
+/// Result of inspecting a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileInspection {
+    /// File appears to be binary (contains null bytes).
     Binary,
-    Text { lines: usize },
+    /// File is text with the given line count.
+    Text {
+        /// Number of lines (wc -l style: newline-terminated).
+        lines: usize,
+    },
 }
 
+/// Errors that can occur when counting lines.
 #[derive(Debug, Error)]
 pub enum CountError {
+    /// File does not exist.
     #[error("file not found")]
     Missing,
+    /// File could not be read.
     #[error("failed to read file: {0}")]
     Unreadable(#[from] std::io::Error),
 }
 
+/// Inspects a file to determine if it's binary or count its lines.
+///
+/// Uses buffered reading for efficiency and checks for null bytes
+/// in the first chunk to detect binary files.
 pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
     let mut file = File::open(path).map_err(|err| match err.kind() {
         std::io::ErrorKind::NotFound => CountError::Missing,

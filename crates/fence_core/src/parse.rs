@@ -1,7 +1,15 @@
+//! TOML configuration parsing with validation.
+//!
+//! Parses `.fence.toml` files and detects unknown keys with suggestions.
+
 use std::path::Path;
 
 use crate::config::{ConfigError, FenceConfig};
 
+/// Parses a `.fence.toml` file and validates its structure.
+///
+/// Returns an error if the TOML is malformed or contains unknown keys.
+/// Unknown keys trigger a suggestion if a similar valid key exists.
 pub fn parse_config(path: &Path, text: &str) -> Result<FenceConfig, ConfigError> {
     let deserializer = toml::Deserializer::new(text);
     let mut unknown = Vec::new();

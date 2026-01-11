@@ -1,0 +1,12 @@
+# Clippy configuration for fence
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# MSRV - matches rust-toolchain.toml
+msrv = "1.75"
+
+# Cognitive complexity threshold (default is 25)
+cognitive-complexity-threshold = 20
+
+# Allow common patterns that clippy might flag
+# These are documented here for visibility
+allow-unwrap-in-tests = true

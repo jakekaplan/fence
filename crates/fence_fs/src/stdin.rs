@@ -1,6 +1,15 @@
+//! Reading file paths from stdin.
+//!
+//! Parses newline-delimited file paths, resolving relative paths
+//! against the current working directory.
+
 use std::io::{Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 
+/// Reads file paths from a reader (typically stdin).
+///
+/// Paths are separated by newlines. Relative paths are resolved against `cwd`.
+/// Empty lines are skipped.
 pub fn read_paths(reader: &mut dyn Read, cwd: &Path) -> IoResult<Vec<PathBuf>> {
     let mut input = String::new();
     reader.read_to_string(&mut input)?;

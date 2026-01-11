@@ -1,6 +1,11 @@
+//! Human-readable output formatting.
+//!
+//! Formats findings and summaries for terminal output.
+
 use crate::config::Severity;
 use crate::report::{Finding, FindingKind, SkipReason, Summary};
 
+/// Formats a finding for display.
 pub fn format_finding(finding: &Finding) -> String {
     match &finding.kind {
         FindingKind::Violation {
@@ -14,6 +19,7 @@ pub fn format_finding(finding: &Finding) -> String {
     }
 }
 
+/// Formats a violation message.
 pub fn format_violation(
     severity: Severity,
     path: &str,
@@ -28,6 +34,7 @@ pub fn format_violation(
     format!("{label}[max-lines]: {path}: {actual} lines (limit: {limit}, +{over_by} over)")
 }
 
+/// Formats a skip warning message.
 pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
     match reason {
         SkipReason::Binary => format!("warning[skip-binary]: {path}: binary file skipped"),
@@ -40,6 +47,7 @@ pub fn format_skip_warning(path: &str, reason: &SkipReason) -> String {
     }
 }
 
+/// Formats the summary line with counts.
 pub fn format_summary(summary: &Summary) -> String {
     let error_label = if summary.errors == 1 {
         "error"
@@ -64,6 +72,7 @@ pub fn format_summary(summary: &Summary) -> String {
     )
 }
 
+/// Formats a success message when all checks pass.
 pub fn format_success(summary: &Summary) -> String {
     format!(
         "All checks passed! ({} files in {}ms)",

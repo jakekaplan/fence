@@ -1,22 +1,36 @@
+//! Directory walking and file expansion.
+//!
+//! Expands paths (files and directories) into a list of files to check.
+
 use std::path::PathBuf;
 use std::sync::mpsc;
 
 use ignore::WalkBuilder;
 use thiserror::Error;
 
+/// Error encountered while walking a directory.
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct WalkError(pub String);
 
+/// Result of expanding paths.
 pub struct WalkResult {
+    /// All discovered file paths.
     pub paths: Vec<PathBuf>,
+    /// Errors encountered during walking.
     pub errors: Vec<WalkError>,
 }
 
+/// Options for directory walking.
 pub struct WalkOptions {
+    /// Whether to respect `.gitignore` files during walking.
     pub respect_gitignore: bool,
 }
 
+/// Expands paths into a flat list of files.
+///
+/// Directories are walked recursively. Non-existent paths are included
+/// (to be reported as missing later). Uses parallel walking for performance.
 pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     let mut files = Vec::new();
     let mut errors = Vec::new();

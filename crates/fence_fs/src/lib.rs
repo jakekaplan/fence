@@ -1,4 +1,10 @@
+//! Filesystem operations for fence.
+//!
+//! This crate handles file discovery, walking directories, counting lines,
+//! and orchestrating checks across multiple files with parallel processing.
+
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 pub mod count;
 pub mod discover;
@@ -14,28 +20,41 @@ use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use rayon::prelude::*;
 use thiserror::Error;
 
+/// Filesystem operation errors.
 #[derive(Debug, Error)]
 pub enum FsError {
+    /// Configuration parsing or compilation error.
     #[error("{0}")]
     Config(#[from] fence_core::config::ConfigError),
+    /// General I/O error.
     #[error("{0}")]
     Io(std::io::Error),
+    /// Failed to read a config file.
     #[error("failed to read config '{}': {}", path.display(), error)]
     ConfigRead {
+        /// Path to the config file.
         path: PathBuf,
+        /// The underlying I/O error.
         error: std::io::Error,
     },
+    /// Gitignore parsing error.
     #[error("{0}")]
     Gitignore(String),
 }
 
+/// Options for running a check.
 pub struct CheckOptions {
+    /// Explicit config file path (overrides discovery).
     pub config_path: Option<PathBuf>,
+    /// Current working directory for relative paths.
     pub cwd: PathBuf,
 }
 
+/// Output from a check run.
 pub struct CheckOutput {
+    /// Results for each file checked.
     pub outcomes: Vec<FileOutcome>,
+    /// Errors encountered during directory walking.
     pub walk_errors: Vec<walk::WalkError>,
 }
 
@@ -59,6 +78,10 @@ fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledC
     Ok(compiled)
 }
 
+/// Runs a check on the given paths.
+///
+/// Expands directories, discovers configs, and checks all files in parallel.
+/// Files are grouped by their applicable config for efficient processing.
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
     let walk_options = walk::WalkOptions {
         respect_gitignore: false,

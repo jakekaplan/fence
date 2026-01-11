@@ -1,27 +1,51 @@
+//! Rule matching and decision logic.
+//!
+//! Determines what action to take for each file based on configuration.
+//! Priority: exclude → exempt → rules (last match wins) → default.
+
 use crate::config::{CompiledConfig, Severity};
 
+/// How a file's limit was determined.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MatchBy {
-    Rule { pattern: String },
+    /// Matched a specific rule pattern.
+    Rule {
+        /// The glob pattern that matched.
+        pattern: String,
+    },
+    /// Used the default limit.
     Default,
 }
 
+/// The decision for how to handle a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
+    /// File matches an exclude pattern; skip entirely.
     Excluded {
+        /// The pattern that matched.
         pattern: String,
     },
+    /// File matches an exempt pattern; count but don't check.
     Exempt {
+        /// The pattern that matched.
         pattern: String,
     },
+    /// File should be checked against a limit.
     Check {
+        /// Maximum allowed lines.
         limit: usize,
+        /// Severity if limit is exceeded.
         severity: Severity,
+        /// How the limit was determined.
         matched_by: MatchBy,
     },
+    /// No default limit and no matching rule; skip.
     SkipNoLimit,
 }
 
+/// Decides what action to take for a file path.
+///
+/// Checks patterns in order: exclude, exempt, rules (last match wins), default.
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
     if let Some(pattern) = config.exclude_patterns().matches(path) {
         return Decision::Excluded {
