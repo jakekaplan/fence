@@ -8,7 +8,7 @@
 //!
 //! - [`config`]: Configuration types and compilation (glob patterns → matchers)
 //! - [`parse`]: TOML parsing with unknown key detection and suggestions
-//! - [`decide`]: Rule matching logic (exclude → exempt → rules → default)
+//! - [`decide`]: Rule matching logic (exclude → rules → default)
 //! - [`report`]: Outcome aggregation and finding generation
 //! - [`format`](mod@format): Human-readable output formatting
 

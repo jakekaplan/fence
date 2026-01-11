@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use globset::{GlobBuilder, GlobMatcher};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
 /// Violation severity level.
@@ -23,13 +23,31 @@ pub enum Severity {
 /// A path-specific line limit rule.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Rule {
-    /// Glob pattern to match files (e.g., `**/*.rs`).
-    pub path: String,
+    /// Glob patterns to match files. Accepts a single string or array of strings.
+    #[serde(deserialize_with = "deserialize_string_or_vec")]
+    pub path: Vec<String>,
     /// Maximum allowed lines for matched files.
     pub max_lines: usize,
     /// Severity when limit is exceeded (default: error).
     #[serde(default)]
     pub severity: Severity,
+}
+
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        String(String),
+        Vec(Vec<String>),
+    }
+
+    match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::String(s) => Ok(vec![s]),
+        StringOrVec::Vec(v) => Ok(v),
+    }
 }
 
 /// Parsed `loq.toml` configuration (before compilation).
@@ -40,12 +58,9 @@ pub struct LoqConfig {
     /// Whether to skip files matched by `.gitignore`.
     #[serde(default = "default_respect_gitignore")]
     pub respect_gitignore: bool,
-    /// Glob patterns for files to completely skip (not counted).
+    /// Glob patterns for files to skip.
     #[serde(default)]
     pub exclude: Vec<String>,
-    /// Glob patterns for files to exempt (counted but not checked).
-    #[serde(default)]
-    pub exempt: Vec<String>,
     /// Path-specific rules (last match wins).
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -57,7 +72,6 @@ impl Default for LoqConfig {
             default_max_lines: Some(500),
             respect_gitignore: true,
             exclude: Vec::new(),
-            exempt: Vec::new(),
             rules: Vec::new(),
         }
     }
@@ -76,12 +90,12 @@ impl LoqConfig {
         Self {
             rules: vec![
                 Rule {
-                    path: "**/*.tsx".to_string(),
+                    path: vec!["**/*.tsx".to_string()],
                     max_lines: 300,
                     severity: Severity::Warning,
                 },
                 Rule {
-                    path: "tests/**/*".to_string(),
+                    path: vec!["tests/**/*".to_string()],
                     max_lines: 500,
                     severity: Severity::Error,
                 },
@@ -112,7 +126,6 @@ pub struct CompiledConfig {
     /// Whether to respect `.gitignore` patterns.
     pub respect_gitignore: bool,
     exclude: PatternList,
-    exempt: PatternList,
     rules: Vec<CompiledRule>,
 }
 
@@ -123,12 +136,6 @@ impl CompiledConfig {
         &self.exclude
     }
 
-    /// Returns the exempt pattern list.
-    #[must_use]
-    pub const fn exempt_patterns(&self) -> &PatternList {
-        &self.exempt
-    }
-
     /// Returns the compiled rules.
     #[must_use]
     pub fn rules(&self) -> &[CompiledRule] {
@@ -136,23 +143,29 @@ impl CompiledConfig {
     }
 }
 
-/// A rule with a compiled glob matcher.
+/// A rule with compiled glob matchers.
 #[derive(Debug, Clone)]
 pub struct CompiledRule {
-    /// Original glob pattern string.
-    pub pattern: String,
+    /// Original glob pattern strings.
+    pub patterns: Vec<String>,
     /// Maximum allowed lines.
     pub max_lines: usize,
     /// Severity when limit exceeded.
     pub severity: Severity,
-    matcher: GlobMatcher,
+    matchers: Vec<GlobMatcher>,
 }
 
 impl CompiledRule {
-    /// Tests if the given path matches this rule's pattern.
+    /// Tests if the given path matches any of this rule's patterns.
+    /// Returns the first matching pattern, or `None` if no match.
     #[must_use]
-    pub fn is_match(&self, path: &str) -> bool {
-        self.matcher.is_match(path)
+    pub fn matches(&self, path: &str) -> Option<&str> {
+        for (matcher, pattern) in self.matchers.iter().zip(&self.patterns) {
+            if matcher.is_match(path) {
+                return Some(pattern);
+            }
+        }
+        None
     }
 }
 
@@ -262,15 +275,17 @@ pub fn compile_config(
         source_path.map_or_else(|| PathBuf::from("<built-in defaults>"), Path::to_path_buf);
 
     let exclude = compile_patterns(&config.exclude, &path_for_errors)?;
-    let exempt = compile_patterns(&config.exempt, &path_for_errors)?;
     let mut rules = Vec::new();
     for rule in config.rules {
-        let matcher = compile_glob(&rule.path, &path_for_errors)?;
+        let mut matchers = Vec::new();
+        for pattern in &rule.path {
+            matchers.push(compile_glob(pattern, &path_for_errors)?);
+        }
         rules.push(CompiledRule {
-            pattern: rule.path,
+            patterns: rule.path,
             max_lines: rule.max_lines,
             severity: rule.severity,
-            matcher,
+            matchers,
         });
     }
 
@@ -280,7 +295,6 @@ pub fn compile_config(
         default_max_lines: config.default_max_lines,
         respect_gitignore: config.respect_gitignore,
         exclude,
-        exempt,
         rules,
     })
 }
@@ -329,7 +343,6 @@ mod tests {
         assert_eq!(config.default_max_lines, Some(500));
         assert!(config.respect_gitignore);
         assert!(config.exclude.is_empty());
-        assert!(config.exempt.is_empty());
         assert!(config.rules.is_empty());
     }
 
@@ -346,8 +359,8 @@ mod tests {
         let template = LoqConfig::init_template();
         assert_eq!(template.default_max_lines, Some(500));
         assert_eq!(template.rules.len(), 2);
-        assert_eq!(template.rules[0].path, "**/*.tsx");
-        assert_eq!(template.rules[1].path, "tests/**/*");
+        assert_eq!(template.rules[0].path, vec!["**/*.tsx"]);
+        assert_eq!(template.rules[1].path, vec!["tests/**/*"]);
     }
 
     #[test]
@@ -356,9 +369,8 @@ mod tests {
             default_max_lines: Some(1),
             respect_gitignore: true,
             exclude: vec![],
-            exempt: vec![],
             rules: vec![Rule {
-                path: "[[".to_string(),
+                path: vec!["[[".to_string()],
                 max_lines: 1,
                 severity: Severity::Error,
             }],
@@ -377,7 +389,6 @@ mod tests {
             default_max_lines: Some(1),
             respect_gitignore: true,
             exclude: vec!["[[".to_string()],
-            exempt: vec![],
             rules: vec![],
         };
         let err =

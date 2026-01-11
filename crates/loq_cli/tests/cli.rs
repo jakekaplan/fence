@@ -192,7 +192,7 @@ fn init_accepts_verbosity_flags() {
 }
 
 #[test]
-fn init_baseline_adds_exempt() {
+fn init_baseline_locks_at_current_size() {
     let temp = TempDir::new().unwrap();
     let contents = repeat_lines(501);
     write_file(&temp, "src/legacy.txt", &contents);
@@ -204,7 +204,13 @@ fn init_baseline_adds_exempt() {
         .success();
 
     let content = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+    // Should have the file in a baseline rule
     assert!(content.contains("\"src/legacy.txt\""));
+    // Should be locked at exact line count (501 lines)
+    assert!(content.contains("max_lines = 501"));
+    assert!(content.contains("# Baseline:"));
+    // Should NOT have warning severity (error is default)
+    assert!(!content.contains("severity = \"warning\"\nmax_lines = 501"));
 }
 
 #[test]

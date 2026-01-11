@@ -13,6 +13,12 @@ use crate::cli::InitArgs;
 use crate::output::print_error;
 use crate::ExitStatus;
 
+/// A file that violates the default limit, captured for baseline.
+struct BaselineEntry {
+    path: String,
+    lines: usize,
+}
+
 pub fn run_init<W1: WriteColor, W2: WriteColor>(
     args: &InitArgs,
     stdout: &mut W1,
@@ -56,10 +62,11 @@ fn baseline_config(cwd: &Path) -> Result<String> {
     let output =
         loq_fs::run_check(vec![cwd.to_path_buf()], options).context("baseline check failed")?;
 
-    let mut exempt = Vec::new();
+    let mut entries = Vec::new();
     for outcome in output.outcomes {
         if let loq_core::OutcomeKind::Violation {
             severity: loq_core::Severity::Error,
+            actual,
             ..
         } = outcome.kind
         {
@@ -67,17 +74,20 @@ fn baseline_config(cwd: &Path) -> Result<String> {
             if path.starts_with("./") {
                 path = path.trim_start_matches("./").to_string();
             }
-            exempt.push(path);
+            entries.push(BaselineEntry {
+                path,
+                lines: actual,
+            });
         }
     }
 
-    exempt.sort();
-    exempt.dedup();
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    entries.dedup_by(|a, b| a.path == b.path);
 
-    Ok(default_config_text(&exempt))
+    Ok(default_config_text(&entries))
 }
 
-fn default_config_text(exempt: &[String]) -> String {
+fn default_config_text(baseline: &[BaselineEntry]) -> String {
     let mut out = String::new();
     let exclude = loq_core::LoqConfig::init_template().exclude;
 
@@ -86,8 +96,7 @@ fn default_config_text(exempt: &[String]) -> String {
     writeln!(out, "respect_gitignore = true").unwrap();
     writeln!(out).unwrap();
 
-    write_toml_array(&mut out, "exclude", &exclude);
-    write_toml_array(&mut out, "exempt", exempt);
+    write_toml_array(&mut out, "exclude", &exclude, true);
 
     writeln!(
         out,
@@ -102,10 +111,28 @@ fn default_config_text(exempt: &[String]) -> String {
     writeln!(out, "[[rules]]").unwrap();
     writeln!(out, "path = \"tests/**/*\"").unwrap();
     write!(out, "max_lines = 500").unwrap();
+
+    // Baseline rules: one per file, locked at current line count
+    if !baseline.is_empty() {
+        writeln!(out).unwrap();
+        writeln!(out).unwrap();
+        writeln!(
+            out,
+            "# Baseline: files locked at current size (any growth is an error)"
+        )
+        .unwrap();
+        for entry in baseline {
+            writeln!(out).unwrap();
+            writeln!(out, "[[rules]]").unwrap();
+            writeln!(out, "path = \"{}\"", entry.path).unwrap();
+            write!(out, "max_lines = {}", entry.lines).unwrap();
+        }
+    }
+
     out
 }
 
-fn write_toml_array(out: &mut String, name: &str, items: &[String]) {
+fn write_toml_array(out: &mut String, name: &str, items: &[String], trailing_newline: bool) {
     if items.is_empty() {
         writeln!(out, "{name} = []").unwrap();
     } else {
@@ -115,5 +142,7 @@ fn write_toml_array(out: &mut String, name: &str, items: &[String]) {
         }
         writeln!(out, "]").unwrap();
     }
-    writeln!(out).unwrap();
+    if trailing_newline {
+        writeln!(out).unwrap();
+    }
 }

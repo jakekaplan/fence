@@ -36,34 +36,9 @@ fn excluded_files_are_skipped() {
 }
 
 #[test]
-fn exempt_files_are_skipped() {
-    let temp = TempDir::new().unwrap();
-    write_file(
-        &temp,
-        "loq.toml",
-        "default_max_lines = 1\nexempt = [\"a.txt\"]\n",
-    );
-    let file = write_file(&temp, "a.txt", "a\nb\n");
-
-    let output = run_check(
-        vec![file],
-        CheckOptions {
-            config_path: Some(temp.path().join("loq.toml")),
-            cwd: temp.path().to_path_buf(),
-        },
-    )
-    .unwrap();
-
-    assert!(matches!(
-        output.outcomes[0].kind,
-        OutcomeKind::Exempt { .. }
-    ));
-}
-
-#[test]
 fn no_default_skips_files() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, "loq.toml", "exempt = []\n");
+    write_file(&temp, "loq.toml", "");
     let file = write_file(&temp, "a.txt", "a\n");
 
     let output = run_check(
@@ -81,7 +56,7 @@ fn no_default_skips_files() {
 #[test]
 fn missing_files_reported() {
     let temp = TempDir::new().unwrap();
-    write_file(&temp, "loq.toml", "default_max_lines = 1\nexempt = []\n");
+    write_file(&temp, "loq.toml", "default_max_lines = 1\n");
     let missing = temp.path().join("missing.txt");
 
     let output = run_check(
@@ -103,7 +78,6 @@ fn binary_and_unreadable_are_reported() {
         default_max_lines: Some(1),
         respect_gitignore: true,
         exclude: vec![],
-        exempt: vec![],
         rules: vec![],
     };
     let compiled = loq_core::config::compile_config(

@@ -161,7 +161,6 @@ fn check_file(
 
     let kind = match decide(compiled, &relative_str) {
         Decision::Excluded { pattern } => OutcomeKind::Excluded { pattern },
-        Decision::Exempt { pattern } => OutcomeKind::Exempt { pattern },
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check {
             limit,

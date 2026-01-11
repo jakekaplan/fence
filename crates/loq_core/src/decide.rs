@@ -1,7 +1,7 @@
 //! Rule matching and decision logic.
 //!
 //! Determines what action to take for each file based on configuration.
-//! Priority: exclude → exempt → rules (last match wins) → default.
+//! Priority: exclude → rules (last match wins) → default.
 
 use crate::config::{CompiledConfig, Severity};
 
@@ -25,11 +25,6 @@ pub enum Decision {
         /// The pattern that matched.
         pattern: String,
     },
-    /// File matches an exempt pattern; count but don't check.
-    Exempt {
-        /// The pattern that matched.
-        pattern: String,
-    },
     /// File should be checked against a limit.
     Check {
         /// Maximum allowed lines.
@@ -45,7 +40,7 @@ pub enum Decision {
 
 /// Decides what action to take for a file path.
 ///
-/// Checks patterns in order: exclude, exempt, rules (last match wins), default.
+/// Checks patterns in order: exclude, rules (last match wins), default.
 #[must_use]
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
     if let Some(pattern) = config.exclude_patterns().matches(path) {
@@ -53,16 +48,13 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
             pattern: pattern.to_string(),
         };
     }
-    if let Some(pattern) = config.exempt_patterns().matches(path) {
-        return Decision::Exempt {
-            pattern: pattern.to_string(),
-        };
-    }
 
     let mut matched_rule = None;
+    let mut matched_pattern = None;
     for rule in config.rules() {
-        if rule.is_match(path) {
+        if let Some(pattern) = rule.matches(path) {
             matched_rule = Some(rule);
+            matched_pattern = Some(pattern.to_string());
         }
     }
 
@@ -71,7 +63,7 @@ pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
             limit: rule.max_lines,
             severity: rule.severity,
             matched_by: MatchBy::Rule {
-                pattern: rule.pattern.clone(),
+                pattern: matched_pattern.unwrap(),
             },
         };
     }
@@ -103,15 +95,14 @@ mod tests {
             default_max_lines: Some(500),
             respect_gitignore: true,
             exclude: vec![],
-            exempt: vec![],
             rules: vec![
                 Rule {
-                    path: "**/*.rs".to_string(),
+                    path: vec!["**/*.rs".to_string()],
                     max_lines: 100,
                     severity: Severity::Error,
                 },
                 Rule {
-                    path: "**/*.rs".to_string(),
+                    path: vec!["**/*.rs".to_string()],
                     max_lines: 200,
                     severity: Severity::Warning,
                 },
@@ -135,7 +126,6 @@ mod tests {
             default_max_lines: Some(123),
             respect_gitignore: true,
             exclude: vec![],
-            exempt: vec![],
             rules: vec![],
         };
         let decision = decide(&compiled(config), "src/file.txt");
@@ -156,7 +146,6 @@ mod tests {
             default_max_lines: None,
             respect_gitignore: true,
             exclude: vec![],
-            exempt: vec![],
             rules: vec![],
         };
         let decision = decide(&compiled(config), "src/file.txt");
@@ -169,9 +158,8 @@ mod tests {
             default_max_lines: Some(10),
             respect_gitignore: true,
             exclude: vec!["**/*.txt".to_string()],
-            exempt: vec![],
             rules: vec![Rule {
-                path: "**/*.txt".to_string(),
+                path: vec!["**/*.txt".to_string()],
                 max_lines: 1,
                 severity: Severity::Error,
             }],
@@ -184,39 +172,63 @@ mod tests {
     }
 
     #[test]
-    fn exempt_beats_rules() {
+    fn multi_path_rule_matches_any() {
         let config = LoqConfig {
-            default_max_lines: Some(10),
+            default_max_lines: Some(500),
             respect_gitignore: true,
             exclude: vec![],
-            exempt: vec!["legacy.rs".to_string()],
             rules: vec![Rule {
-                path: "**/*.rs".to_string(),
-                max_lines: 1,
-                severity: Severity::Error,
+                path: vec!["src/a.rs".to_string(), "src/b.rs".to_string()],
+                max_lines: 100,
+                severity: Severity::Warning,
             }],
         };
-        let decision = decide(&compiled(config), "legacy.rs");
-        match decision {
-            Decision::Exempt { pattern } => assert_eq!(pattern, "legacy.rs"),
-            _ => panic!("expected exempt, got {decision:?}"),
-        }
-    }
+        let compiled = compiled(config);
 
-    #[test]
-    fn exclude_beats_exempt() {
-        // When a file matches both exclude and exempt, exclude wins
-        let config = LoqConfig {
-            default_max_lines: Some(10),
-            respect_gitignore: true,
-            exclude: vec!["**/*.gen.rs".to_string()],
-            exempt: vec!["**/*.gen.rs".to_string()],
-            rules: vec![],
-        };
-        let decision = decide(&compiled(config), "output.gen.rs");
-        match decision {
-            Decision::Excluded { pattern } => assert_eq!(pattern, "**/*.gen.rs"),
-            _ => panic!("expected excluded, got {decision:?}"),
+        // First pattern matches
+        let decision_a = decide(&compiled, "src/a.rs");
+        match decision_a {
+            Decision::Check {
+                limit,
+                severity,
+                matched_by,
+            } => {
+                assert_eq!(limit, 100);
+                assert_eq!(severity, Severity::Warning);
+                assert_eq!(
+                    matched_by,
+                    MatchBy::Rule {
+                        pattern: "src/a.rs".to_string()
+                    }
+                );
+            }
+            _ => panic!("expected check for a.rs"),
+        }
+
+        // Second pattern matches
+        let decision_b = decide(&compiled, "src/b.rs");
+        match decision_b {
+            Decision::Check { matched_by, .. } => {
+                assert_eq!(
+                    matched_by,
+                    MatchBy::Rule {
+                        pattern: "src/b.rs".to_string()
+                    }
+                );
+            }
+            _ => panic!("expected check for b.rs"),
+        }
+
+        // Neither pattern matches - falls back to default
+        let decision_c = decide(&compiled, "src/c.rs");
+        match decision_c {
+            Decision::Check {
+                limit, matched_by, ..
+            } => {
+                assert_eq!(limit, 500);
+                assert_eq!(matched_by, MatchBy::Default);
+            }
+            _ => panic!("expected default for c.rs"),
         }
     }
 }

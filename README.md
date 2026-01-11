@@ -60,7 +60,7 @@ Create a config with defaults:
 loq init
 ```
 
-Baseline a legacy repo (exempts current errors, blocks new ones):
+Baseline a legacy repo (locks files at current size, any growth is an error):
 
 ```bash
 loq init --baseline
@@ -111,8 +111,6 @@ default_max_lines = 500
 respect_gitignore = true
 
 exclude = []
-
-exempt = []
 
 # Last match wins. Put general rules first and overrides later.
 [[rules]]

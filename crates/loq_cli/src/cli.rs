@@ -49,7 +49,7 @@ pub struct CheckArgs {
 /// Arguments for the init command.
 #[derive(Args, Debug, Clone)]
 pub struct InitArgs {
-    /// Generate config that exempts current violations.
+    /// Lock current violations at their line count (any growth is an error).
     #[arg(long = "baseline")]
     pub baseline: bool,
 }

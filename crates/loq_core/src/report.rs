@@ -27,11 +27,6 @@ pub enum OutcomeKind {
         /// The pattern that matched.
         pattern: String,
     },
-    /// File was exempted by pattern.
-    Exempt {
-        /// The pattern that matched.
-        pattern: String,
-    },
     /// No limit configured for this file.
     NoLimit,
     /// File does not exist.
@@ -117,7 +112,7 @@ pub struct Finding {
 pub struct Summary {
     /// Total files processed.
     pub total: usize,
-    /// Files skipped (excluded, exempt, no limit, etc.).
+    /// Files skipped (excluded, no limit, etc.).
     pub skipped: usize,
     /// Files that passed their limit.
     pub passed: usize,
@@ -153,7 +148,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
 
     for outcome in outcomes {
         match &outcome.kind {
-            OutcomeKind::Excluded { .. } | OutcomeKind::Exempt { .. } | OutcomeKind::NoLimit => {
+            OutcomeKind::Excluded { .. } | OutcomeKind::NoLimit => {
                 summary.skipped += 1;
             }
             OutcomeKind::Missing => {
@@ -365,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn excluded_exempt_nolimit_are_skipped() {
+    fn excluded_nolimit_are_skipped() {
         let outcomes = vec![
             FileOutcome {
                 path: "excluded.txt".into(),
@@ -376,14 +371,6 @@ mod tests {
                 },
             },
             FileOutcome {
-                path: "exempt.rs".into(),
-                display_path: "exempt.rs".into(),
-                config_source: ConfigOrigin::BuiltIn,
-                kind: OutcomeKind::Exempt {
-                    pattern: "exempt.rs".to_string(),
-                },
-            },
-            FileOutcome {
                 path: "nolimit.js".into(),
                 display_path: "nolimit.js".into(),
                 config_source: ConfigOrigin::BuiltIn,
@@ -391,12 +378,12 @@ mod tests {
             },
         ];
         let report = build_report(&outcomes, 0);
-        assert_eq!(report.summary.total, 3);
-        assert_eq!(report.summary.skipped, 3);
+        assert_eq!(report.summary.total, 2);
+        assert_eq!(report.summary.skipped, 2);
         assert_eq!(report.summary.passed, 0);
         assert_eq!(report.summary.errors, 0);
         assert_eq!(report.summary.warnings, 0);
-        // No findings for excluded/exempt/nolimit
+        // No findings for excluded/nolimit
         assert!(report.findings.is_empty());
     }
 }

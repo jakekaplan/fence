@@ -71,7 +71,6 @@ fn suggest_key(key: &str) -> Option<String> {
         "default_max_lines",
         "respect_gitignore",
         "exclude",
-        "exempt",
         "rules",
         "path",
         "max_lines",
@@ -258,5 +257,40 @@ severity = "critical"
             ConfigError::Toml { .. } => {}
             _ => panic!("expected Toml error, got {err:?}"),
         }
+    }
+
+    #[test]
+    fn rule_path_accepts_string() {
+        let text = r#"
+[[rules]]
+path = "**/*.rs"
+max_lines = 100
+"#;
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].path, vec!["**/*.rs"]);
+    }
+
+    #[test]
+    fn rule_path_accepts_array() {
+        let text = r#"
+[[rules]]
+path = ["src/a.rs", "src/b.rs"]
+max_lines = 100
+"#;
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].path, vec!["src/a.rs", "src/b.rs"]);
+    }
+
+    #[test]
+    fn rule_path_array_single_element() {
+        let text = r#"
+[[rules]]
+path = ["only_one.rs"]
+max_lines = 100
+"#;
+        let config = parse_config(Path::new("loq.toml"), text).unwrap();
+        assert_eq!(config.rules[0].path, vec!["only_one.rs"]);
     }
 }

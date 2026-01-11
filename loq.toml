@@ -5,5 +5,3 @@ respect_gitignore = true
 exclude = [
   "**/Cargo.lock",
 ]
-
-exempt = []
