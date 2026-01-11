@@ -3,8 +3,7 @@ version = 2
 ignore = []
 
 [licenses]
-unlicensed = "deny"
-copyleft = "warn"
+version = 2
 allow = [
     "MIT",
     "Apache-2.0",
