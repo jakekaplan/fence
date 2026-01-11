@@ -2,6 +2,7 @@ use std::io;
 
 use fence_core::report::{Finding, FindingKind, SkipReason, Summary};
 use fence_core::{ConfigOrigin, Severity};
+use fence_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
 pub fn severity_label(severity: Severity) -> &'static str {
@@ -115,12 +116,10 @@ pub fn write_finding<W: WriteColor>(
             }
         }
         FindingKind::SkipWarning { reason } => {
-            let msg = match reason {
-                SkipReason::Binary => "binary file skipped",
-                SkipReason::Unreadable(e) => {
-                    return writeln!(writer, "   unreadable: {e}");
-                }
-                SkipReason::Missing => "file not found",
+            let msg: std::borrow::Cow<'static, str> = match reason {
+                SkipReason::Binary => "binary file skipped".into(),
+                SkipReason::Unreadable(e) => format!("unreadable: {e}").into(),
+                SkipReason::Missing => "file not found".into(),
             };
             writeln!(writer, "   {msg}")?;
         }
@@ -247,4 +246,30 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
 pub fn print_error<W: WriteColor>(stderr: &mut W, message: &str) -> i32 {
     let _ = write_line(stderr, Some(Color::Red), &format!("error: {message}"));
     2
+}
+
+pub fn write_walk_errors<W: WriteColor>(
+    writer: &mut W,
+    errors: &[WalkError],
+    verbose: bool,
+) -> io::Result<()> {
+    let mut spec = ColorSpec::new();
+    spec.set_dimmed(true);
+    writer.set_color(&spec)?;
+
+    if verbose {
+        writeln!(writer, "Skipped paths ({}):", errors.len())?;
+        for error in errors {
+            writeln!(writer, "  {}", error.0)?;
+        }
+    } else {
+        writeln!(
+            writer,
+            "Note: {} path(s) skipped due to errors. Use --verbose for details.",
+            errors.len()
+        )?;
+    }
+
+    writer.reset()?;
+    Ok(())
 }

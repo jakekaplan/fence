@@ -8,12 +8,13 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use anyhow::{Context, Result};
 use clap::Parser;
 use fence_core::report::{build_report, FindingKind};
 use fence_fs::{CheckOptions, CheckOutput, FsError};
 use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
-use output::{print_error, write_block, write_finding, write_summary};
+use output::{print_error, write_block, write_finding, write_summary, write_walk_errors};
 
 pub use cli::{Cli, Command};
 
@@ -56,7 +57,7 @@ fn run_check<R: Read, W1: WriteColor, W2: WriteColor>(
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let inputs = match collect_inputs(args.paths, stdin, &cwd) {
         Ok(paths) => paths,
-        Err(err) => return print_error(stderr, &err),
+        Err(err) => return print_error(stderr, &format!("{err:#}")),
     };
 
     let options = CheckOptions {
@@ -114,6 +115,11 @@ fn handle_check_output<W: WriteColor>(
                 let _ = write_finding(stdout, finding, verbose);
             }
             let _ = write_summary(stdout, &report.summary);
+
+            // Show walk errors if any
+            if !output.walk_errors.is_empty() {
+                let _ = write_walk_errors(stdout, &output.walk_errors, verbose);
+            }
         }
     }
 
@@ -128,7 +134,7 @@ fn collect_inputs<R: Read>(
     mut paths: Vec<PathBuf>,
     stdin: &mut R,
     cwd: &Path,
-) -> Result<Vec<PathBuf>, String> {
+) -> Result<Vec<PathBuf>> {
     let mut use_stdin = false;
     paths.retain(|path| {
         if path == Path::new("-") {
@@ -140,8 +146,8 @@ fn collect_inputs<R: Read>(
     });
 
     if use_stdin {
-        let mut stdin_paths = fence_fs::stdin::read_paths(stdin, cwd)
-            .map_err(|err| format!("failed to read stdin: {err}"))?;
+        let mut stdin_paths =
+            fence_fs::stdin::read_paths(stdin, cwd).context("failed to read stdin")?;
         paths.append(&mut stdin_paths);
     }
 
@@ -171,7 +177,7 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
     let content = if args.baseline {
         match baseline_config(&cwd) {
             Ok(content) => content,
-            Err(err) => return print_error(stderr, &err),
+            Err(err) => return print_error(stderr, &format!("{err:#}")),
         }
     } else {
         default_config_text(&[])
@@ -185,11 +191,10 @@ fn run_init<W1: WriteColor, W2: WriteColor>(
     0
 }
 
-fn baseline_config(cwd: &Path) -> Result<String, String> {
-    let temp_path = cwd.join(".fence.baseline.tmp.toml");
+fn baseline_config(cwd: &Path) -> Result<String> {
+    let temp_path = cwd.join(format!(".fence.baseline.{}.tmp.toml", std::process::id()));
     let template = default_config_text(&[]);
-    std::fs::write(&temp_path, template)
-        .map_err(|err| format!("failed to create baseline config: {err}"))?;
+    std::fs::write(&temp_path, &template).context("failed to create baseline config")?;
 
     let options = CheckOptions {
         config_path: Some(temp_path.clone()),
@@ -198,7 +203,7 @@ fn baseline_config(cwd: &Path) -> Result<String, String> {
 
     let output = fence_fs::run_check(vec![cwd.to_path_buf()], options);
     let _ = std::fs::remove_file(&temp_path);
-    let output = output.map_err(|err| format!("baseline check failed: {err}"))?;
+    let output = output.context("baseline check failed")?;
 
     let mut exempt = Vec::new();
     for outcome in output.outcomes {
@@ -295,7 +300,7 @@ mod tests {
     fn collect_inputs_reports_stdin_error() {
         let err = collect_inputs(vec![PathBuf::from("-")], &mut FailingReader, Path::new("."))
             .unwrap_err();
-        assert!(err.contains("failed to read stdin"));
+        assert!(err.to_string().contains("failed to read stdin"));
     }
 
     #[test]

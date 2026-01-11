@@ -20,6 +20,11 @@ pub enum FsError {
     Config(#[from] fence_core::config::ConfigError),
     #[error("{0}")]
     Io(std::io::Error),
+    #[error("failed to read config '{}': {}", path.display(), error)]
+    ConfigRead {
+        path: PathBuf,
+        error: std::io::Error,
+    },
     #[error("{0}")]
     Gitignore(String),
 }
@@ -31,6 +36,7 @@ pub struct CheckOptions {
 
 pub struct CheckOutput {
     pub outcomes: Vec<FileOutcome>,
+    pub walk_errors: Vec<walk::WalkError>,
 }
 
 fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledConfig, FsError> {
@@ -39,7 +45,10 @@ fn load_config_from_path(path: PathBuf, fallback_cwd: &Path) -> Result<CompiledC
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| fallback_cwd.to_path_buf());
-    let text = std::fs::read_to_string(&config_path).map_err(FsError::Io)?;
+    let text = std::fs::read_to_string(&config_path).map_err(|error| FsError::ConfigRead {
+        path: config_path.clone(),
+        error,
+    })?;
     let config = fence_core::parse_config(&config_path, &text)?;
     let compiled = compile_config(
         ConfigOrigin::File(config_path.clone()),
@@ -54,7 +63,9 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     let walk_options = walk::WalkOptions {
         respect_gitignore: false,
     };
-    let mut file_list = walk::expand_paths(&paths, &walk_options)?;
+    let walk_result = walk::expand_paths(&paths, &walk_options);
+    let mut file_list = walk_result.paths;
+    let walk_errors = walk_result.errors;
     file_list.sort();
     file_list.dedup();
 
@@ -66,7 +77,10 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         let group_outcomes =
             check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
         outcomes.extend(group_outcomes);
-        return Ok(CheckOutput { outcomes });
+        return Ok(CheckOutput {
+            outcomes,
+            walk_errors,
+        });
     }
 
     let mut discovery = discover::ConfigDiscovery::new();
@@ -96,7 +110,10 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         outcomes.extend(group_outcomes);
     }
 
-    Ok(CheckOutput { outcomes })
+    Ok(CheckOutput {
+        outcomes,
+        walk_errors,
+    })
 }
 
 fn check_group(

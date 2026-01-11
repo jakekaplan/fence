@@ -3,6 +3,7 @@ use std::io::{Read, Result as IoResult};
 use std::path::Path;
 
 use memchr::{memchr, memchr_iter};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileInspection {
@@ -10,10 +11,12 @@ pub enum FileInspection {
     Text { lines: usize },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CountError {
+    #[error("file not found")]
     Missing,
-    Unreadable(std::io::Error),
+    #[error("failed to read file: {0}")]
+    Unreadable(#[from] std::io::Error),
 }
 
 pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {

@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 fence_core = { path = "../fence_core" }
 fence_fs = { path = "../fence_fs" }
+anyhow.workspace = true
 clap.workspace = true
 termcolor.workspace = true
 

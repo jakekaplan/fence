@@ -2,21 +2,31 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 
 use ignore::WalkBuilder;
+use thiserror::Error;
 
-use crate::FsError;
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct WalkError(pub String);
+
+pub struct WalkResult {
+    pub paths: Vec<PathBuf>,
+    pub errors: Vec<WalkError>,
+}
 
 pub struct WalkOptions {
     pub respect_gitignore: bool,
 }
 
-pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> Result<Vec<PathBuf>, FsError> {
+pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     let mut files = Vec::new();
+    let mut errors = Vec::new();
 
     for path in paths {
         if path.exists() {
             if path.is_dir() {
-                let dir_files = walk_directory(path, options)?;
-                files.extend(dir_files);
+                let result = walk_directory(path, options);
+                files.extend(result.paths);
+                errors.extend(result.errors);
             } else {
                 files.push(path.to_path_buf());
             }
@@ -25,11 +35,15 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> Result<Vec<Path
         }
     }
 
-    Ok(files)
+    WalkResult {
+        paths: files,
+        errors,
+    }
 }
 
-fn walk_directory(path: &PathBuf, options: &WalkOptions) -> Result<Vec<PathBuf>, FsError> {
-    let (tx, rx) = mpsc::channel();
+fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
+    let (path_tx, path_rx) = mpsc::channel();
+    let (error_tx, error_rx) = mpsc::channel();
 
     let mut builder = WalkBuilder::new(path);
     builder
@@ -45,19 +59,30 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> Result<Vec<PathBuf>,
     let walker = builder.build_parallel();
 
     walker.run(|| {
-        let tx = tx.clone();
+        let path_tx = path_tx.clone();
+        let error_tx = error_tx.clone();
         Box::new(move |entry| {
-            if let Ok(e) = entry {
-                if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                    let _ = tx.send(e.into_path());
+            match entry {
+                Ok(e) => {
+                    if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                        let _ = path_tx.send(e.into_path());
+                    }
+                }
+                Err(e) => {
+                    let _ = error_tx.send(WalkError(e.to_string()));
                 }
             }
             ignore::WalkState::Continue
         })
     });
 
-    drop(tx);
-    Ok(rx.into_iter().collect())
+    drop(path_tx);
+    drop(error_tx);
+
+    WalkResult {
+        paths: path_rx.into_iter().collect(),
+        errors: error_rx.into_iter().collect(),
+    }
 }
 
 #[cfg(test)]
@@ -76,8 +101,8 @@ mod tests {
         let options = WalkOptions {
             respect_gitignore: false,
         };
-        let paths = expand_paths(&[root.to_path_buf()], &options).unwrap();
-        assert_eq!(paths.len(), 2);
+        let result = expand_paths(&[root.to_path_buf()], &options);
+        assert_eq!(result.paths.len(), 2);
     }
 
     #[test]
@@ -91,10 +116,13 @@ mod tests {
         let options = WalkOptions {
             respect_gitignore: false,
         };
-        let paths = expand_paths(&[file.clone(), missing.clone()], &options).unwrap();
-        assert_eq!(paths.len(), 2);
-        assert!(paths.iter().any(|path| path.ends_with("a.txt")));
-        assert!(paths.iter().any(|path| path.ends_with("missing.txt")));
+        let result = expand_paths(&[file.clone(), missing.clone()], &options);
+        assert_eq!(result.paths.len(), 2);
+        assert!(result.paths.iter().any(|path| path.ends_with("a.txt")));
+        assert!(result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("missing.txt")));
     }
 
     #[test]
@@ -109,11 +137,17 @@ mod tests {
         let options = WalkOptions {
             respect_gitignore: true,
         };
-        let paths = expand_paths(&[root.join("sub")], &options).unwrap();
+        let result = expand_paths(&[root.join("sub")], &options);
         // Should have .gitignore and included.txt (ignored.txt is excluded)
-        assert_eq!(paths.len(), 2);
-        assert!(paths.iter().any(|path| path.ends_with("included.txt")));
-        assert!(!paths.iter().any(|path| path.ends_with("ignored.txt")));
+        assert_eq!(result.paths.len(), 2);
+        assert!(result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("included.txt")));
+        assert!(!result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("ignored.txt")));
     }
 
     #[test]
@@ -128,9 +162,12 @@ mod tests {
         let options = WalkOptions {
             respect_gitignore: false,
         };
-        let paths = expand_paths(&[root.join("sub")], &options).unwrap();
+        let result = expand_paths(&[root.join("sub")], &options);
         // Should have all 3: .gitignore, ignored.txt, included.txt
-        assert_eq!(paths.len(), 3);
-        assert!(paths.iter().any(|path| path.ends_with("ignored.txt")));
+        assert_eq!(result.paths.len(), 3);
+        assert!(result
+            .paths
+            .iter()
+            .any(|path| path.ends_with("ignored.txt")));
     }
 }
