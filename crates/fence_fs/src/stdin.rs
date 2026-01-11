@@ -35,4 +35,15 @@ mod tests {
         assert_eq!(paths[0], PathBuf::from("/repo/src/a.rs"));
         assert_eq!(paths[1], PathBuf::from("/repo/./b.rs"));
     }
+
+    #[test]
+    fn absolute_paths_preserved() {
+        let input = b"/absolute/path.rs\nrelative.rs\n";
+        let cwd = Path::new("/repo");
+        let mut reader: &[u8] = input;
+        let paths = read_paths(&mut reader, cwd).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], PathBuf::from("/absolute/path.rs"));
+        assert_eq!(paths[1], PathBuf::from("/repo/relative.rs"));
+    }
 }

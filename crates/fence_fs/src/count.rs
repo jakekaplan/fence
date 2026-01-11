@@ -122,4 +122,29 @@ mod tests {
         let err = inspect_file(dir.path()).unwrap_err();
         assert!(matches!(err, CountError::Unreadable(_)));
     }
+
+    #[test]
+    fn count_large_file_multiple_chunks() {
+        // Buffer size is 8192 bytes, so create file larger than that
+        let mut content = Vec::new();
+        for i in 0..1000 {
+            content.extend_from_slice(format!("line number {i}\n").as_bytes());
+        }
+        let file = write_temp(&content);
+        let result = inspect_file(file.path()).unwrap();
+        assert_eq!(result, FileInspection::Text { lines: 1000 });
+    }
+
+    #[test]
+    fn count_large_file_no_trailing_newline() {
+        // Test multi-chunk reading where last byte isn't newline
+        let mut content = Vec::new();
+        for i in 0..999 {
+            content.extend_from_slice(format!("line number {i}\n").as_bytes());
+        }
+        content.extend_from_slice(b"final line without newline");
+        let file = write_temp(&content);
+        let result = inspect_file(file.path()).unwrap();
+        assert_eq!(result, FileInspection::Text { lines: 1000 });
+    }
 }

@@ -81,4 +81,34 @@ mod tests {
         let found = find_config(&file, &mut discovery).unwrap();
         assert!(found.is_none());
     }
+
+    #[test]
+    fn cache_hit_returns_cached_value() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join(".fence.toml"), "default_max_lines = 10").unwrap();
+
+        let file1 = root.join("file1.txt");
+        let file2 = root.join("file2.txt");
+        std::fs::write(&file1, "hello").unwrap();
+        std::fs::write(&file2, "world").unwrap();
+
+        let mut discovery = ConfigDiscovery::new();
+        // First call populates cache
+        let found1 = find_config(&file1, &mut discovery).unwrap();
+        assert!(found1.is_some());
+        // Second call should hit cache
+        let found2 = find_config(&file2, &mut discovery).unwrap();
+        assert_eq!(found1, found2);
+    }
+
+    #[test]
+    fn default_impl_works() {
+        let mut discovery = ConfigDiscovery::default();
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("file.txt");
+        std::fs::write(&file, "hello").unwrap();
+        let found = find_config(&file, &mut discovery).unwrap();
+        assert!(found.is_none());
+    }
 }

@@ -217,3 +217,144 @@ fn config_error_is_reported() {
         .failure()
         .stderr(predicate::str::contains("unknown key"));
 }
+
+#[test]
+fn quiet_mode_shows_errors_only() {
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 1
+[[rules]]
+path = "warn.txt"
+max_lines = 1
+severity = "warning"
+"#;
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "warn.txt", "a\nb\n");
+    let big = repeat_lines(401);
+    write_file(&temp, "error.txt", &big);
+
+    let output = cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--quiet"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("error[max-lines]"));
+    assert!(!stdout.contains("warning"));
+    assert!(!stdout.contains("Found"));
+}
+
+#[test]
+fn verbose_shows_excluded_decision() {
+    let temp = TempDir::new().unwrap();
+    let config = "default_max_lines = 100\nexclude = [\"*.log\"]\n";
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "debug.log", "log content\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "debug.log"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("excluded"));
+}
+
+#[test]
+fn verbose_shows_exempt_decision() {
+    let temp = TempDir::new().unwrap();
+    let config = "default_max_lines = 1\nexempt = [\"legacy.txt\"]\n";
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "legacy.txt", "a\nb\nc\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "legacy.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("exempt"));
+}
+
+#[test]
+fn verbose_shows_no_limit_decision() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, ".fence.toml", "exempt = []\n");
+    write_file(&temp, "a.txt", "content\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "a.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no-limit"));
+}
+
+#[test]
+fn verbose_shows_matched_rule_pattern() {
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 100
+[[rules]]
+path = "**/*.rs"
+max_lines = 50
+"#;
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "main.rs", "fn main() {}\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "main.rs"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("matched: **/*.rs"));
+}
+
+#[test]
+fn warning_severity_shows_yellow() {
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 100
+[[rules]]
+path = "**/*.txt"
+max_lines = 1
+severity = "warning"
+"#;
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "warn.txt", "a\nb\nc\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["check", "warn.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("warning[max-lines]"));
+}
+
+#[test]
+fn verbose_shows_warning_severity_label() {
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 100
+[[rules]]
+path = "**/*.txt"
+max_lines = 1
+severity = "warning"
+"#;
+    write_file(&temp, ".fence.toml", config);
+    write_file(&temp, "warn.txt", "a\nb\nc\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "warn.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("severity=warning"));
+}
+
+#[test]
+fn verbose_shows_builtin_config_source() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, "a.txt", "content\n");
+
+    cargo_bin_cmd!("fence")
+        .current_dir(temp.path())
+        .args(["--verbose", "check", "a.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("<built-in defaults>"));
+}

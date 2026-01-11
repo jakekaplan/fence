@@ -27,6 +27,9 @@ cargo test --all
 
 # Coverage (95% minimum)
 cargo llvm-cov --workspace --lcov --output-path lcov.info --fail-under-lines 95
+
+# Benchmark against a public repo (requires hyperfine)
+just bench https://github.com/astral-sh/ruff
 ```
 
 ## CI Parity

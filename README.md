@@ -77,6 +77,9 @@ cargo install --path crates/fence_cli
 
 # quick checks (fmt + clippy)
 just check
+
+# benchmark against a public repo
+just bench https://github.com/astral-sh/ruff
 ```
 
 Enable git hooks in this repo:

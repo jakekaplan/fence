@@ -459,4 +459,80 @@ mod tests {
             compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap_err();
         assert!(err.to_string().contains("invalid glob"));
     }
+
+    #[test]
+    fn pattern_list_no_match_returns_none() {
+        let patterns = vec![PatternMatcher {
+            pattern: "*.rs".to_string(),
+            matcher: globset::GlobBuilder::new("*.rs")
+                .literal_separator(true)
+                .build()
+                .unwrap()
+                .compile_matcher(),
+        }];
+        let list = PatternList::new(patterns);
+        assert!(list.matches("foo.txt").is_none());
+    }
+
+    #[test]
+    fn line_col_from_offset_handles_newlines() {
+        let text = "line1\nline2\nline3";
+        // After first newline
+        let (line, col) = line_col_from_offset(text, 6).unwrap();
+        assert_eq!(line, 2);
+        assert_eq!(col, 1);
+    }
+
+    #[test]
+    fn line_col_from_offset_out_of_bounds() {
+        let text = "short";
+        assert!(line_col_from_offset(text, 100).is_none());
+    }
+
+    #[test]
+    fn extract_key_with_array_index() {
+        let path = serde_ignored::Path::Map {
+            parent: &serde_ignored::Path::Root,
+            key: "rules[0]".to_string(),
+        };
+        let key = extract_key(&path);
+        assert_eq!(key, Some("rules".to_string()));
+    }
+
+    #[test]
+    fn extract_key_empty_returns_none() {
+        let path = serde_ignored::Path::Map {
+            parent: &serde_ignored::Path::Root,
+            key: "[0]".to_string(),
+        };
+        let key = extract_key(&path);
+        assert!(key.is_none());
+    }
+
+    #[test]
+    fn find_key_location_finds_key() {
+        let text = "  typo_key = 1\n";
+        let loc = find_key_location(text, "typo_key");
+        assert_eq!(loc, Some((1, 3)));
+    }
+
+    #[test]
+    fn find_key_location_not_found() {
+        let text = "other = 1\n";
+        let loc = find_key_location(text, "missing");
+        assert!(loc.is_none());
+    }
+
+    #[test]
+    fn format_toml_error_without_location() {
+        let msg = format_toml_error(Path::new("test.toml"), &None, "parse error");
+        assert_eq!(msg, "test.toml - parse error");
+    }
+
+    #[test]
+    fn format_unknown_key_error_without_suggestion() {
+        let msg = format_unknown_key_error(Path::new("test.toml"), "xyz", &Some((1, 1)), &None);
+        assert!(msg.contains("unknown key 'xyz'"));
+        assert!(!msg.contains("did you mean"));
+    }
 }
