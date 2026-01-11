@@ -258,52 +258,6 @@ fn gitignore_negation_pattern_whitelists_file() {
 }
 
 #[test]
-fn multiple_configs_in_different_directories() {
-    let temp = TempDir::new().unwrap();
-
-    // Subdirectory A with strict limit (2 lines)
-    write_file(&temp, "dir_a/loq.toml", "default_max_lines = 2\n");
-    let file_a = write_file(&temp, "dir_a/file.txt", "one\ntwo\nthree\n"); // 3 lines - violation
-
-    // Subdirectory B with lenient limit (10 lines)
-    write_file(&temp, "dir_b/loq.toml", "default_max_lines = 10\n");
-    let file_b = write_file(&temp, "dir_b/file.txt", "one\ntwo\nthree\n"); // 3 lines - pass
-
-    let output = run_check(
-        vec![file_a.clone(), file_b.clone()],
-        CheckOptions {
-            config_path: None, // Use discovery
-            cwd: temp.path().to_path_buf(),
-        },
-    )
-    .unwrap();
-
-    assert_eq!(output.outcomes.len(), 2);
-
-    // Find outcomes by path
-    let outcome_a = output.outcomes.iter().find(|o| o.path == file_a).unwrap();
-    let outcome_b = output.outcomes.iter().find(|o| o.path == file_b).unwrap();
-
-    // File A should violate (3 lines > 2 limit)
-    match &outcome_a.kind {
-        OutcomeKind::Violation { limit, actual, .. } => {
-            assert_eq!(*limit, 2);
-            assert_eq!(*actual, 3);
-        }
-        other => panic!("expected Violation for file_a, got {other:?}"),
-    }
-
-    // File B should pass (3 lines < 10 limit)
-    match &outcome_b.kind {
-        OutcomeKind::Pass { limit, actual, .. } => {
-            assert_eq!(*limit, 10);
-            assert_eq!(*actual, 3);
-        }
-        other => panic!("expected Pass for file_b, got {other:?}"),
-    }
-}
-
-#[test]
 fn missing_config_file_returns_error() {
     let temp = TempDir::new().unwrap();
     let file = write_file(&temp, "test.txt", "content\n");

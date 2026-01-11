@@ -3,7 +3,7 @@ default_max_lines = 500
 respect_gitignore = true
 
 exclude = [
-  "Cargo.lock",
+  "**/Cargo.lock",
 ]
 
 exempt = []

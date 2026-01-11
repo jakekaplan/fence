@@ -78,11 +78,22 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
 
 /// Runs a check on the given paths.
 ///
-/// Expands directories, discovers configs, and checks all files in parallel.
-/// Files are grouped by their applicable config for efficient processing.
+/// Loads a single config (from --config, cwd discovery, or built-in defaults),
+/// then checks all files against that config in parallel.
 pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutput, FsError> {
+    // Step 1: Load config (explicit path, discovered, or built-in defaults)
+    let compiled = if let Some(ref config_path) = options.config_path {
+        load_config_from_path(config_path, &options.cwd)?
+    } else if let Some(config_path) = discover::find_config(&options.cwd) {
+        load_config_from_path(&config_path, &options.cwd)?
+    } else {
+        let config = LoqConfig::built_in_defaults();
+        compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
+    };
+
+    // Step 2: Walk paths, respecting gitignore if configured
     let walk_options = walk::WalkOptions {
-        respect_gitignore: false,
+        respect_gitignore: compiled.respect_gitignore,
     };
     let walk_result = walk::expand_paths(&paths, &walk_options);
     let mut file_list = walk_result.paths;
@@ -90,45 +101,15 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.sort();
     file_list.dedup();
 
-    let root_gitignore = load_gitignore(&options.cwd)?;
-    let mut outcomes = Vec::new();
+    // Step 3: Load root gitignore for additional filtering
+    let root_gitignore = if compiled.respect_gitignore {
+        load_gitignore(&options.cwd)?
+    } else {
+        None
+    };
 
-    if let Some(ref config_path) = options.config_path {
-        let compiled = load_config_from_path(config_path, &options.cwd)?;
-        let group_outcomes =
-            check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
-        outcomes.extend(group_outcomes);
-        return Ok(CheckOutput {
-            outcomes,
-            walk_errors,
-        });
-    }
-
-    let mut discovery = discover::ConfigDiscovery::new();
-    let mut groups: std::collections::HashMap<Option<PathBuf>, Vec<PathBuf>> =
-        std::collections::HashMap::new();
-
-    for path in &file_list {
-        let config_path = discover::find_config(path, &mut discovery)?;
-        groups.entry(config_path).or_default().push(path.clone());
-    }
-
-    for (config_path, group_paths) in groups {
-        let compiled = if let Some(ref path) = config_path {
-            load_config_from_path(path, &options.cwd)?
-        } else {
-            let config = LoqConfig::built_in_defaults();
-            compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
-        };
-
-        let group_outcomes = check_group(
-            &group_paths,
-            &compiled,
-            &options.cwd,
-            root_gitignore.as_ref(),
-        );
-        outcomes.extend(group_outcomes);
-    }
+    // Step 4: Check all files in parallel
+    let outcomes = check_group(&file_list, &compiled, &options.cwd, root_gitignore.as_ref());
 
     Ok(CheckOutput {
         outcomes,
