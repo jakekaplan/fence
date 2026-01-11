@@ -3,9 +3,11 @@ name = "loq_fs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Filesystem operations for loq - enforce file size constraints"
+repository = "https://github.com/jakekaplan/loq"
 
 [dependencies]
-loq_core = { path = "../loq_core" }
+loq_core = { path = "../loq_core", version = "0.1.0" }
 rayon.workspace = true
 pathdiff.workspace = true
 ignore.workspace = true

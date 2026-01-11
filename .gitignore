@@ -2,6 +2,14 @@
 /target/
 **/*.rs.bk
 
+# Python build artifacts
+/dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+
 # Coverage output
 lcov.info
 *.profraw

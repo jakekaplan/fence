@@ -9,6 +9,12 @@ LLMs happily generate big files. Big files burn context, slow reviews, and becom
 ## Install
 
 ```bash
+pip install loq
+
+# Or with uv
+uv tool install loq
+
+# Or with cargo
 cargo install loq
 ```
 

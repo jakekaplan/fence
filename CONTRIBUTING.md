@@ -55,7 +55,7 @@ crates/
 cargo bench -p loq_fs
 
 # Real-world benchmark (requires hyperfine)
-just bench https://github.com/owner/repo
+just bench https://github.com/astral-sh/ruff
 ```
 
 ## Commit Messages

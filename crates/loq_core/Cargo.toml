@@ -3,6 +3,8 @@ name = "loq_core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Core library for loq - enforce file size constraints"
+repository = "https://github.com/jakekaplan/loq"
 
 [dependencies]
 serde.workspace = true

@@ -1,0 +1,44 @@
+[project]
+name = "loq"
+version = "0.1.0"
+description = "Enforce file size constraints"
+authors = [{ name = "Jake Kaplan", email = "jakegkaplan@gmail.com" }]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+keywords = ["linter", "code-quality", "file-size", "loc", "lines-of-code"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Repository = "https://github.com/jakekaplan/loq"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# Build the binary crate
+manifest-path = "crates/loq_cli/Cargo.toml"
+# Python source location
+python-source = "python"
+# Module name
+module-name = "loq"
+# Binary, not a Python extension
+bindings = "bin"
+# Strip symbols for smaller binaries
+strip = true
