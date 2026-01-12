@@ -4,7 +4,7 @@
 //! newline detection. Detects binary files by checking for null bytes.
 
 use std::fs::File;
-use std::io::{Read, Result as IoResult};
+use std::io::Read;
 use std::path::Path;
 
 use memchr::{memchr, memchr_iter};
@@ -44,7 +44,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
     })?;
 
     let mut buf = [0u8; 4096];
-    let mut read = read_chunk(&mut file, &mut buf).map_err(CountError::Unreadable)?;
+    let mut read = file.read(&mut buf).map_err(CountError::Unreadable)?;
     if read == 0 {
         return Ok(FileInspection::Text { lines: 0 });
     }
@@ -57,7 +57,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
     let mut last_byte = buf[read - 1];
 
     loop {
-        read = read_chunk(&mut file, &mut buf).map_err(CountError::Unreadable)?;
+        read = file.read(&mut buf).map_err(CountError::Unreadable)?;
         if read == 0 {
             break;
         }
@@ -71,10 +71,6 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
     }
 
     Ok(FileInspection::Text { lines })
-}
-
-fn read_chunk(file: &mut File, buf: &mut [u8]) -> IoResult<usize> {
-    file.read(buf)
 }
 
 #[cfg(test)]

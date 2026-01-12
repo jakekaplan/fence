@@ -34,7 +34,17 @@ pedantic = { level = "warn", priority = -1 }
 must_use_candidate = "warn"
 missing_const_for_fn = "warn"
 redundant_clone = "warn"
-# Allow these pedantic lints - too strict for this project
+# Restriction lints (Ruff-style)
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "warn"
+exit = "warn"
+get_unwrap = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+verbose_file_reads = "warn"
+# Allow these pedantic lints
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 needless_pass_by_value = "allow"

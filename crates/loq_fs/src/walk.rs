@@ -12,7 +12,7 @@ use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
 
-use crate::normalize_path;
+use crate::relative_path_str;
 
 /// Files/directories that are always excluded regardless of configuration.
 const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
@@ -91,7 +91,7 @@ fn is_excluded(path: &Path, options: &WalkOptions) -> bool {
         return true;
     }
 
-    // Check gitignore
+    // Check gitignore (needs PathBuf for matched_path_or_any_parents)
     if let Some(gitignore) = options.gitignore {
         let relative =
             pathdiff::diff_paths(path, options.root_dir).unwrap_or_else(|| path.to_path_buf());
@@ -102,9 +102,7 @@ fn is_excluded(path: &Path, options: &WalkOptions) -> bool {
     }
 
     // Check exclude patterns
-    let relative =
-        pathdiff::diff_paths(path, options.root_dir).unwrap_or_else(|| path.to_path_buf());
-    let relative_str = normalize_path(&relative);
+    let relative_str = relative_path_str(path, options.root_dir);
     options.exclude.matches(&relative_str).is_some()
 }
 
@@ -160,8 +158,7 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
     let paths: Vec<PathBuf> = path_rx
         .into_iter()
         .filter(|p| {
-            let relative = pathdiff::diff_paths(p, options.root_dir).unwrap_or_else(|| p.clone());
-            let relative_str = normalize_path(&relative);
+            let relative_str = relative_path_str(p, options.root_dir);
             options.exclude.matches(&relative_str).is_none()
         })
         .collect();

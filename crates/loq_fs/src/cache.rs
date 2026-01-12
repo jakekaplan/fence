@@ -17,12 +17,20 @@ use loq_core::config::CompiledConfig;
 const CACHE_VERSION: u32 = 1;
 const CACHE_FILE: &str = ".loq_cache";
 
-/// On-disk cache format.
-#[derive(Serialize, Deserialize)]
+/// On-disk cache format (for deserialization).
+#[derive(Deserialize)]
 struct CacheFile {
     version: u32,
     config_hash: u64,
     entries: FxHashMap<String, CacheEntry>,
+}
+
+/// Borrowed view for serialization (avoids cloning entries).
+#[derive(Serialize)]
+struct CacheFileRef<'a> {
+    version: u32,
+    config_hash: u64,
+    entries: &'a FxHashMap<String, CacheEntry>,
 }
 
 /// Single cache entry for a file.
@@ -117,13 +125,13 @@ impl Cache {
             return;
         }
 
-        let cache_file = CacheFile {
+        let cache_ref = CacheFileRef {
             version: CACHE_VERSION,
             config_hash: self.config_hash,
-            entries: self.entries.clone(),
+            entries: &self.entries,
         };
 
-        let Ok(contents) = serde_json::to_string(&cache_file) else {
+        let Ok(contents) = serde_json::to_string(&cache_ref) else {
             return;
         };
 

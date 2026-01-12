@@ -177,9 +177,7 @@ fn check_file(
         kind,
     };
 
-    let relative =
-        pathdiff::diff_paths(&abs_path, &compiled.root_dir).unwrap_or_else(|| abs_path.clone());
-    let relative_str = normalize_path(&relative);
+    let relative_str = relative_path_str(&abs_path, &compiled.root_dir);
 
     let kind = match decide(compiled, &relative_str) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
@@ -261,15 +259,23 @@ fn check_file_lines(
     }
 }
 
+/// Computes a path relative to root, normalized to forward slashes.
+///
+/// Falls back to the original path if it cannot be made relative.
+pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
+    let relative = pathdiff::diff_paths(path, root).unwrap_or_else(|| path.to_path_buf());
+    normalize_path(&relative)
+}
+
 /// Normalizes a path to use forward slashes on all platforms.
 #[cfg(windows)]
-pub(crate) fn normalize_path(path: &Path) -> String {
+fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
 /// Normalizes a path to use forward slashes on all platforms.
 #[cfg(not(windows))]
-pub(crate) fn normalize_path(path: &Path) -> String {
+fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
