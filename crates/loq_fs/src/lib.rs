@@ -278,7 +278,7 @@ pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
     let relative = {
         #[cfg(windows)]
         {
-            diff_paths_windows(path, root).unwrap_or_else(|| path.to_path_buf())
+            relative_path_windows(path, root).unwrap_or_else(|| path.to_path_buf())
         }
         #[cfg(not(windows))]
         {
@@ -289,23 +289,25 @@ pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
 }
 
 #[cfg(windows)]
-fn diff_paths_windows(path: &Path, root: &Path) -> Option<PathBuf> {
-    if let Some(relative) = pathdiff::diff_paths(path, root) {
-        return Some(relative);
+fn relative_path_windows(path: &Path, root: &Path) -> Option<PathBuf> {
+    if let (Ok(path), Ok(root)) = (path.canonicalize(), root.canonicalize()) {
+        let path = strip_verbatim_prefix(&path);
+        let root = strip_verbatim_prefix(&root);
+        if let Ok(relative) = path.strip_prefix(&root) {
+            return Some(relative.to_path_buf());
+        }
+        if let Some(relative) = pathdiff::diff_paths(&path, &root) {
+            return Some(relative);
+        }
     }
 
     let stripped_path = strip_verbatim_prefix(path);
     let stripped_root = strip_verbatim_prefix(root);
-    if let Some(relative) = pathdiff::diff_paths(&stripped_path, &stripped_root) {
-        return Some(relative);
+    if let Ok(relative) = stripped_path.strip_prefix(&stripped_root) {
+        return Some(relative.to_path_buf());
     }
 
-    let canonical_path = path.canonicalize().ok().map(|p| strip_verbatim_prefix(&p));
-    let canonical_root = root.canonicalize().ok().map(|p| strip_verbatim_prefix(&p));
-    match (canonical_path, canonical_root) {
-        (Some(path), Some(root)) => pathdiff::diff_paths(&path, &root),
-        _ => None,
-    }
+    pathdiff::diff_paths(&stripped_path, &stripped_root)
 }
 
 /// Strip Windows verbatim prefixes (\\?\ / \\?\UNC\) for consistent diffing.
