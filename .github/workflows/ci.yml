@@ -37,6 +37,13 @@ jobs:
           cargo llvm-cov --workspace --lcov --output-path lcov.info
           cargo llvm-cov report --fail-under-lines 95
 
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   security:
     runs-on: ubuntu-latest
     steps:

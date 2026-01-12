@@ -1,7 +1,6 @@
 use std::io;
 
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
-use loq_core::Severity;
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
 
@@ -23,13 +22,6 @@ fn dimmed() -> ColorSpec {
     spec
 }
 
-pub const fn severity_label(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Error => "error",
-        Severity::Warning => "warning",
-    }
-}
-
 pub fn write_line<W: WriteColor>(
     writer: &mut W,
     color: Option<Color>,
@@ -49,10 +41,7 @@ pub fn write_finding<W: WriteColor>(
     verbose: bool,
 ) -> io::Result<()> {
     let (symbol, color) = match &finding.kind {
-        FindingKind::Violation { severity, .. } => match severity {
-            Severity::Error => ("✖", Color::Red),
-            Severity::Warning => ("⚠", Color::Yellow),
-        },
+        FindingKind::Violation { .. } => ("✖", Color::Red),
         FindingKind::SkipWarning { .. } => ("⚠", Color::Yellow),
     };
 
@@ -66,7 +55,6 @@ pub fn write_finding<W: WriteColor>(
         FindingKind::Violation {
             actual,
             limit,
-            severity,
             matched_by,
             ..
         } => {
@@ -93,19 +81,10 @@ pub fn write_finding<W: WriteColor>(
                 writer.set_color(&dimmed())?;
                 let rule_str = match matched_by {
                     loq_core::MatchBy::Rule { pattern } => {
-                        format!(
-                            "max-lines={} severity={} (match: {})",
-                            limit,
-                            severity_label(*severity),
-                            pattern
-                        )
+                        format!("max-lines={limit} (match: {pattern})")
                     }
                     loq_core::MatchBy::Default => {
-                        format!(
-                            "max-lines={} severity={} (default)",
-                            limit,
-                            severity_label(*severity)
-                        )
+                        format!("max-lines={limit} (default)")
                     }
                 };
                 writeln!(writer, "                  └─ rule: {rule_str}")?;
@@ -172,16 +151,14 @@ pub fn write_block<W: WriteColor>(
 }
 
 pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Result<()> {
-    let violations = summary.errors + summary.warnings;
-
-    if violations > 0 {
-        let word = if violations == 1 {
+    if summary.errors > 0 {
+        let word = if summary.errors == 1 {
             "violation"
         } else {
             "violations"
         };
         writer.set_color(&fg(Color::Red))?;
-        write!(writer, "{violations} {word}")?;
+        write!(writer, "{} {word}", summary.errors)?;
         writer.reset()?;
         writer.set_color(&dimmed())?;
         writeln!(writer, " ({}ms)", summary.duration_ms)?;

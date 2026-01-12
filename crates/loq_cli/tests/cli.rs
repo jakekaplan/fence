@@ -214,8 +214,8 @@ fn init_baseline_locks_at_current_size() {
     // Should be locked at exact line count (501 lines)
     assert!(content.contains("max_lines = 501"));
     assert!(content.contains("# Baseline:"));
-    // Should NOT have warning severity (error is default)
-    assert!(!content.contains("severity = \"warning\"\nmax_lines = 501"));
+    // Should NOT have severity field (it was removed)
+    assert!(!content.contains("severity"));
 }
 
 #[test]
@@ -286,46 +286,4 @@ max_lines = 1
         .assert()
         .failure()
         .stdout(predicate::str::contains("match: **/*.rs"));
-}
-
-#[test]
-fn warning_severity_shows_yellow() {
-    let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 100
-[[rules]]
-path = "**/*.txt"
-max_lines = 1
-severity = "warning"
-"#;
-    write_file(&temp, "loq.toml", config);
-    write_file(&temp, "warn.txt", "a\nb\nc\n");
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["check", "warn.txt"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("⚠"))
-        .stdout(predicate::str::contains("3"))
-        .stdout(predicate::str::contains(">"));
-}
-
-#[test]
-fn verbose_shows_warning_severity_label() {
-    let temp = TempDir::new().unwrap();
-    let config = r#"default_max_lines = 100
-[[rules]]
-path = "**/*.txt"
-max_lines = 1
-severity = "warning"
-"#;
-    write_file(&temp, "loq.toml", config);
-    write_file(&temp, "warn.txt", "a\nb\nc\n");
-
-    cargo_bin_cmd!("loq")
-        .current_dir(temp.path())
-        .args(["--verbose", "check", "warn.txt"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("severity=warning"));
 }

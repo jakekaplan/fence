@@ -86,8 +86,8 @@ fn one_violation() {
 }
 
 #[test]
-fn mixed_pass_error_warning() {
-    let (stdout, stderr, success) = run_loq("mixed");
+fn pass_and_fail() {
+    let (stdout, stderr, success) = run_loq("pass_and_fail");
 
     assert!(!success, "should fail when there's an error");
     assert!(stderr.is_empty(), "stderr should be empty");

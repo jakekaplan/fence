@@ -190,11 +190,9 @@ fn check_file(
 
     let kind = match decide(compiled, &relative_str) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
-        Decision::Check {
-            limit,
-            severity,
-            matched_by,
-        } => check_file_lines(path, &relative_str, limit, severity, matched_by, file_cache),
+        Decision::Check { limit, matched_by } => {
+            check_file_lines(path, &relative_str, limit, matched_by, file_cache)
+        }
     };
 
     make_outcome(kind)
@@ -204,7 +202,6 @@ fn check_file_lines(
     path: &Path,
     cache_key: &str,
     limit: usize,
-    severity: loq_core::Severity,
     matched_by: loq_core::MatchBy,
     file_cache: &Mutex<cache::Cache>,
 ) -> OutcomeKind {
@@ -219,14 +216,12 @@ fn check_file_lines(
                     OutcomeKind::Violation {
                         limit,
                         actual: lines,
-                        severity,
                         matched_by,
                     }
                 } else {
                     OutcomeKind::Pass {
                         limit,
                         actual: lines,
-                        severity,
                         matched_by,
                     }
                 };
@@ -249,14 +244,12 @@ fn check_file_lines(
                 OutcomeKind::Violation {
                     limit,
                     actual: lines,
-                    severity,
                     matched_by,
                 }
             } else {
                 OutcomeKind::Pass {
                     limit,
                     actual: lines,
-                    severity,
                     matched_by,
                 }
             }

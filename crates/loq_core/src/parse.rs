@@ -74,7 +74,6 @@ fn suggest_key(key: &str) -> Option<String> {
         "rules",
         "path",
         "max_lines",
-        "severity",
     ];
     let mut best = None;
     let mut best_score = usize::MAX;
@@ -115,7 +114,6 @@ fn line_col_from_offset(text: &str, offset: usize) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Severity;
 
     #[test]
     fn unknown_key_detection() {
@@ -133,11 +131,11 @@ mod tests {
     }
 
     #[test]
-    fn rule_severity_defaults_to_error() {
+    fn rule_parsed_correctly() {
         let text = "default_max_lines = 500\n[[rules]]\npath = \"**/*.rs\"\nmax_lines = 10\n";
         let config = parse_config(Path::new("loq.toml"), text).unwrap();
         assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].severity, Severity::Error);
+        assert_eq!(config.rules[0].max_lines, 10);
     }
 
     #[test]
@@ -227,26 +225,6 @@ mod tests {
         let text = "other = 1\n";
         let loc = find_key_location(text, "missing");
         assert!(loc.is_none());
-    }
-
-    #[test]
-    fn invalid_severity_reports_error() {
-        let text = r#"
-[[rules]]
-path = "**/*.rs"
-max_lines = 100
-severity = "critical"
-"#;
-        let err = parse_config(Path::new("loq.toml"), text).unwrap_err();
-        match err {
-            ConfigError::Toml { message, .. } => {
-                assert!(
-                    message.contains("unknown variant"),
-                    "expected 'unknown variant' error, got: {message}"
-                );
-            }
-            _ => panic!("expected Toml error, got {err:?}"),
-        }
     }
 
     #[test]

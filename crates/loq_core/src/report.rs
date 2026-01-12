@@ -1,9 +1,8 @@
 //! Outcome aggregation and report generation.
 //!
-//! Collects file check outcomes and generates structured reports
-//! with findings sorted by severity.
+//! Collects file check outcomes and generates structured reports.
 
-use crate::config::{ConfigOrigin, Severity};
+use crate::config::ConfigOrigin;
 use crate::decide::MatchBy;
 
 /// The result of checking a single file.
@@ -39,8 +38,6 @@ pub enum OutcomeKind {
         limit: usize,
         /// Actual line count.
         actual: usize,
-        /// Severity of the violation.
-        severity: Severity,
         /// How the limit was determined.
         matched_by: MatchBy,
     },
@@ -50,8 +47,6 @@ pub enum OutcomeKind {
         limit: usize,
         /// Actual line count.
         actual: usize,
-        /// Severity that would apply if over.
-        severity: Severity,
         /// How the limit was determined.
         matched_by: MatchBy,
     },
@@ -73,8 +68,6 @@ pub enum SkipReason {
 pub enum FindingKind {
     /// File exceeded its line limit.
     Violation {
-        /// Severity of the violation.
-        severity: Severity,
         /// The configured limit.
         limit: usize,
         /// Actual line count.
@@ -111,10 +104,8 @@ pub struct Summary {
     pub skipped: usize,
     /// Files that passed their limit.
     pub passed: usize,
-    /// Files with error-severity violations.
+    /// Files with violations.
     pub errors: usize,
-    /// Files with warning-severity violations.
-    pub warnings: usize,
     /// Time taken in milliseconds.
     pub duration_ms: u128,
 }
@@ -122,7 +113,7 @@ pub struct Summary {
 /// The complete report from a check run.
 #[derive(Debug, Clone)]
 pub struct Report {
-    /// All findings, sorted by severity.
+    /// All findings (skip warnings first, then violations by overage).
     pub findings: Vec<Finding>,
     /// Summary statistics.
     pub summary: Summary,
@@ -131,7 +122,7 @@ pub struct Report {
 /// Builds a report from file outcomes.
 ///
 /// Aggregates outcomes into findings and summary statistics.
-/// Findings are sorted by severity (skip warnings, then warnings, then errors).
+/// Findings are sorted with skip warnings first, then violations by overage.
 #[must_use]
 pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
     let mut findings = Vec::new();
@@ -180,7 +171,6 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                 summary.passed += 1;
             }
             OutcomeKind::Violation {
-                severity,
                 limit,
                 actual,
                 matched_by,
@@ -190,17 +180,13 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
                     path: outcome.display_path.clone(),
                     config_source: outcome.config_source.clone(),
                     kind: FindingKind::Violation {
-                        severity: *severity,
                         limit: *limit,
                         actual: *actual,
                         over_by,
                         matched_by: matched_by.clone(),
                     },
                 });
-                match severity {
-                    Severity::Error => summary.errors += 1,
-                    Severity::Warning => summary.warnings += 1,
-                }
+                summary.errors += 1;
             }
         }
     }
@@ -210,9 +196,7 @@ pub fn build_report(outcomes: &[FileOutcome], duration_ms: u128) -> Report {
     Report { findings, summary }
 }
 
-/// Sorts findings by severity (skip warnings first, errors last).
-///
-/// Within each severity, violations are sorted by how much they're over the limit.
+/// Sorts findings with skip warnings first, then violations by overage.
 pub fn sort_findings(findings: &mut [Finding]) {
     findings.sort_by(|a, b| {
         let rank_a = finding_rank(&a.kind);
@@ -237,10 +221,7 @@ pub fn sort_findings(findings: &mut [Finding]) {
 const fn finding_rank(kind: &FindingKind) -> u8 {
     match kind {
         FindingKind::SkipWarning { .. } => 0,
-        FindingKind::Violation { severity, .. } => match severity {
-            Severity::Warning => 1,
-            Severity::Error => 2,
-        },
+        FindingKind::Violation { .. } => 1,
     }
 }
 
@@ -259,7 +240,6 @@ mod tests {
                 kind: OutcomeKind::Pass {
                     limit: 10,
                     actual: 5,
-                    severity: Severity::Error,
                     matched_by: MatchBy::Default,
                 },
             },
@@ -270,7 +250,6 @@ mod tests {
                 kind: OutcomeKind::Violation {
                     limit: 10,
                     actual: 20,
-                    severity: Severity::Error,
                     matched_by: MatchBy::Default,
                 },
             },
@@ -281,7 +260,6 @@ mod tests {
                 kind: OutcomeKind::Violation {
                     limit: 10,
                     actual: 12,
-                    severity: Severity::Warning,
                     matched_by: MatchBy::Default,
                 },
             },
@@ -309,19 +287,17 @@ mod tests {
         let report = build_report(&outcomes, 0);
         assert_eq!(report.summary.total, 6);
         assert_eq!(report.summary.passed, 1);
-        assert_eq!(report.summary.errors, 1);
-        assert_eq!(report.summary.warnings, 1);
+        assert_eq!(report.summary.errors, 2);
         assert_eq!(report.summary.skipped, 3);
     }
 
     #[test]
-    fn findings_sorted_by_severity_and_overage() {
+    fn findings_sorted_by_overage() {
         let mut findings = vec![
             Finding {
                 path: "b".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
-                    severity: Severity::Warning,
                     limit: 10,
                     actual: 12,
                     over_by: 2,
@@ -332,7 +308,6 @@ mod tests {
                 path: "a".into(),
                 config_source: ConfigOrigin::BuiltIn,
                 kind: FindingKind::Violation {
-                    severity: Severity::Error,
                     limit: 10,
                     actual: 20,
                     over_by: 10,
@@ -348,7 +323,7 @@ mod tests {
             },
         ];
         sort_findings(&mut findings);
-        // Skip warnings first, then warnings, then errors (biggest at bottom near summary)
+        // Skip warnings first, then violations sorted by overage (smallest first)
         assert_eq!(findings[0].path, "c");
         assert_eq!(findings[1].path, "b");
         assert_eq!(findings[2].path, "a");
@@ -367,7 +342,6 @@ mod tests {
         assert_eq!(report.summary.skipped, 1);
         assert_eq!(report.summary.passed, 0);
         assert_eq!(report.summary.errors, 0);
-        assert_eq!(report.summary.warnings, 0);
         // No findings for nolimit
         assert!(report.findings.is_empty());
     }

@@ -96,12 +96,7 @@ fn baseline_config(cwd: &Path) -> Result<String> {
 
     let mut entries = Vec::new();
     for outcome in output.outcomes {
-        if let loq_core::OutcomeKind::Violation {
-            severity: loq_core::Severity::Error,
-            actual,
-            ..
-        } = outcome.kind
-        {
+        if let loq_core::OutcomeKind::Violation { actual, .. } = outcome.kind {
             let path = outcome
                 .display_path
                 .strip_prefix("./")
@@ -139,7 +134,7 @@ fn default_config_text(baseline: &[BaselineEntry]) -> String {
         .unwrap();
         writeln!(out, "# [[rules]]").unwrap();
         writeln!(out, "# path = \"**/*.ext\"").unwrap();
-        writeln!(out, "# severity = \"warning\"").unwrap();
+        writeln!(out, "# max_lines = 300").unwrap();
         writeln!(out, "#").unwrap();
         writeln!(out, "# [[rules]]").unwrap();
         writeln!(out, "# path = \"some/path/**/*\"").unwrap();

@@ -2,7 +2,6 @@
 //!
 //! Formats findings and summaries for terminal output.
 
-use crate::config::Severity;
 use crate::report::{Finding, FindingKind, SkipReason, Summary};
 
 /// Formats a finding for display.
@@ -10,30 +9,19 @@ use crate::report::{Finding, FindingKind, SkipReason, Summary};
 pub fn format_finding(finding: &Finding) -> String {
     match &finding.kind {
         FindingKind::Violation {
-            severity,
             limit,
             actual,
             over_by,
             ..
-        } => format_violation(*severity, &finding.path, *actual, *limit, *over_by),
+        } => format_violation(&finding.path, *actual, *limit, *over_by),
         FindingKind::SkipWarning { reason } => format_skip_warning(&finding.path, reason),
     }
 }
 
 /// Formats a violation message.
 #[must_use]
-pub fn format_violation(
-    severity: Severity,
-    path: &str,
-    actual: usize,
-    limit: usize,
-    over_by: usize,
-) -> String {
-    let label = match severity {
-        Severity::Error => "error",
-        Severity::Warning => "warning",
-    };
-    format!("{label}[max-lines]: {path}: {actual} lines (limit: {limit}, +{over_by} over)")
+pub fn format_violation(path: &str, actual: usize, limit: usize, over_by: usize) -> String {
+    format!("error[max-lines]: {path}: {actual} lines (limit: {limit}, +{over_by} over)")
 }
 
 /// Formats a skip warning message.
@@ -58,20 +46,13 @@ pub fn format_summary(summary: &Summary) -> String {
     } else {
         "errors"
     };
-    let warning_label = if summary.warnings == 1 {
-        "warning"
-    } else {
-        "warnings"
-    };
     format!(
-        "{} files checked, {} skipped, {} passed, {} {}, {} {} ({}ms)",
+        "{} files checked, {} skipped, {} passed, {} {} ({}ms)",
         summary.total,
         summary.skipped,
         summary.passed,
         summary.errors,
         error_label,
-        summary.warnings,
-        warning_label,
         summary.duration_ms
     )
 }
@@ -98,7 +79,6 @@ mod tests {
             path: "src/lib.rs".into(),
             config_source: ConfigOrigin::BuiltIn,
             kind: FindingKind::Violation {
-                severity: Severity::Error,
                 limit: 10,
                 actual: 12,
                 over_by: 2,
@@ -119,26 +99,6 @@ mod tests {
     }
 
     #[test]
-    fn format_warning_line() {
-        let finding = Finding {
-            path: "src/lib.rs".into(),
-            config_source: ConfigOrigin::BuiltIn,
-            kind: FindingKind::Violation {
-                severity: Severity::Warning,
-                limit: 10,
-                actual: 12,
-                over_by: 2,
-                matched_by: MatchBy::Default,
-            },
-        };
-        let line = format_finding(&finding);
-        assert_eq!(
-            line,
-            "warning[max-lines]: src/lib.rs: 12 lines (limit: 10, +2 over)"
-        );
-    }
-
-    #[test]
     fn format_skip_unreadable_and_missing() {
         let unreadable = format_skip_warning("bin", &SkipReason::Unreadable("denied".into()));
         assert_eq!(
@@ -156,27 +116,23 @@ mod tests {
             skipped: 0,
             passed: 0,
             errors: 1,
-            warnings: 2,
             duration_ms: 5,
         };
         let line = format_summary(&summary);
         assert!(line.contains("1 error"));
-        assert!(line.contains("2 warnings"));
     }
 
     #[test]
-    fn format_summary_singular_warning() {
+    fn format_summary_plural_errors() {
         let summary = Summary {
-            total: 1,
+            total: 3,
             skipped: 0,
             passed: 1,
             errors: 2,
-            warnings: 1,
             duration_ms: 5,
         };
         let line = format_summary(&summary);
         assert!(line.contains("2 errors"));
-        assert!(line.contains("1 warning"));
     }
 
     #[test]
@@ -202,7 +158,6 @@ mod tests {
             skipped: 2,
             passed: 8,
             errors: 0,
-            warnings: 0,
             duration_ms: 42,
         };
         let line = format_success(&summary);

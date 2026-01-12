@@ -1,6 +1,6 @@
 use super::*;
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
-use loq_core::{ConfigOrigin, MatchBy, Severity};
+use loq_core::{ConfigOrigin, MatchBy};
 use termcolor::NoColor;
 
 fn output_string<F>(f: F) -> String
@@ -26,16 +26,6 @@ fn colorspec_helpers_build_correctly() {
     let dimmed_spec = dimmed();
     assert!(dimmed_spec.dimmed());
     assert!(dimmed_spec.fg().is_none());
-}
-
-#[test]
-fn severity_label_error() {
-    assert_eq!(severity_label(Severity::Error), "error");
-}
-
-#[test]
-fn severity_label_warning() {
-    assert_eq!(severity_label(Severity::Warning), "warning");
 }
 
 #[test]
@@ -83,12 +73,11 @@ fn write_block_single_line() {
 }
 
 #[test]
-fn write_finding_violation_error() {
+fn write_finding_violation() {
     let finding = Finding {
         path: "src/main.rs".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            severity: Severity::Error,
             limit: 100,
             actual: 150,
             over_by: 50,
@@ -104,32 +93,11 @@ fn write_finding_violation_error() {
 }
 
 #[test]
-fn write_finding_violation_warning() {
-    let finding = Finding {
-        path: "warn.txt".into(),
-        config_source: ConfigOrigin::BuiltIn,
-        kind: FindingKind::Violation {
-            severity: Severity::Warning,
-            limit: 10,
-            actual: 15,
-            over_by: 5,
-            matched_by: MatchBy::Default,
-        },
-    };
-    let out = output_string(|w| write_finding(w, &finding, false));
-    assert!(out.contains("⚠"));
-    // Compact format: 15 > 10
-    assert!(out.contains("15"));
-    assert!(out.contains("> 10"));
-}
-
-#[test]
 fn write_finding_violation_verbose_default_match() {
     let finding = Finding {
         path: "src/lib.rs".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            severity: Severity::Error,
             limit: 100,
             actual: 200,
             over_by: 100,
@@ -147,7 +115,6 @@ fn write_finding_violation_verbose_rule_match() {
         path: "src/lib.rs".into(),
         config_source: ConfigOrigin::File(std::path::PathBuf::from("/project/loq.toml")),
         kind: FindingKind::Violation {
-            severity: Severity::Warning,
             limit: 50,
             actual: 75,
             over_by: 25,
@@ -159,7 +126,6 @@ fn write_finding_violation_verbose_rule_match() {
     let out = output_string(|w| write_finding(w, &finding, true));
     assert!(out.contains("rule:"));
     assert!(out.contains("match: **/*.rs"));
-    assert!(out.contains("severity=warning"));
 }
 
 #[test]
@@ -209,7 +175,6 @@ fn write_finding_path_without_directory() {
         path: "file.txt".into(),
         config_source: ConfigOrigin::BuiltIn,
         kind: FindingKind::Violation {
-            severity: Severity::Error,
             limit: 10,
             actual: 20,
             over_by: 10,
@@ -226,8 +191,7 @@ fn write_summary_with_violations() {
         total: 10,
         skipped: 2,
         passed: 5,
-        errors: 2,
-        warnings: 1,
+        errors: 3,
         duration_ms: 42,
     };
     let out = output_string(|w| write_summary(w, &summary));
@@ -243,7 +207,6 @@ fn write_summary_all_passed() {
         skipped: 0,
         passed: 5,
         errors: 0,
-        warnings: 0,
         duration_ms: 10,
     };
     let out = output_string(|w| write_summary(w, &summary));
@@ -260,7 +223,6 @@ fn write_summary_single_violation() {
         skipped: 0,
         passed: 0,
         errors: 1,
-        warnings: 0,
         duration_ms: 5,
     };
     let out = output_string(|w| write_summary(w, &summary));

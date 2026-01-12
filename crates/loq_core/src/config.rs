@@ -9,17 +9,6 @@ use globset::{GlobBuilder, GlobMatcher};
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-/// Violation severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Severity {
-    /// Causes non-zero exit code.
-    #[default]
-    Error,
-    /// Reported but does not fail the check.
-    Warning,
-}
-
 /// A path-specific line limit rule.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Rule {
@@ -28,9 +17,6 @@ pub struct Rule {
     pub path: Vec<String>,
     /// Maximum allowed lines for matched files.
     pub max_lines: usize,
-    /// Severity when limit is exceeded (default: error).
-    #[serde(default)]
-    pub severity: Severity,
 }
 
 fn deserialize_string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
@@ -92,12 +78,10 @@ impl LoqConfig {
                 Rule {
                     path: vec!["**/*.tsx".to_string()],
                     max_lines: 300,
-                    severity: Severity::Warning,
                 },
                 Rule {
                     path: vec!["tests/**/*".to_string()],
                     max_lines: 500,
-                    severity: Severity::Error,
                 },
             ],
             ..Self::default()
@@ -150,8 +134,6 @@ pub struct CompiledRule {
     pub patterns: Vec<String>,
     /// Maximum allowed lines.
     pub max_lines: usize,
-    /// Severity when limit exceeded.
-    pub severity: Severity,
     matchers: Vec<GlobMatcher>,
 }
 
@@ -289,7 +271,6 @@ pub fn compile_config(
         rules.push(CompiledRule {
             patterns: rule.path,
             max_lines: rule.max_lines,
-            severity: rule.severity,
             matchers,
         });
     }
@@ -377,7 +358,6 @@ mod tests {
             rules: vec![Rule {
                 path: vec!["[[".to_string()],
                 max_lines: 1,
-                severity: Severity::Error,
             }],
         };
         let err =

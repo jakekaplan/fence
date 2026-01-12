@@ -3,6 +3,5 @@ source: crates/loq_cli/tests/snapshots.rs
 assertion_line: 94
 expression: stdout
 ---
-⚠      8 > 5      warning.md
 ✖     15 > 10     error.rs
-2 violations (TIME)
+1 violation (TIME)
