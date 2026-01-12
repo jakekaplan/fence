@@ -319,6 +319,31 @@ mod tests {
         assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
     }
 
+    #[test]
+    fn exclude_dotdir_pattern_without_leading_globstar() {
+        // Regression test: `.git/**` should exclude .git directory contents
+        // Previously failed when walker returned paths with "./" prefix
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::create_dir_all(root.join(".git/logs")).unwrap();
+        std::fs::write(root.join(".git/logs/HEAD"), "ref").unwrap();
+        std::fs::write(root.join("keep.rs"), "keep").unwrap();
+
+        let exclude = exclude_pattern(".git/**");
+        let options = WalkOptions {
+            respect_gitignore: false,
+            exclude: &exclude,
+            root_dir: root,
+        };
+        let result = expand_paths(&[root.to_path_buf()], &options);
+        assert_eq!(result.paths.len(), 1, "got: {:?}", result.paths);
+        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
+        assert!(!result
+            .paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains(".git")));
+    }
+
     #[cfg(unix)]
     #[test]
     fn symlink_to_file_not_followed_by_default() {

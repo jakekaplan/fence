@@ -279,16 +279,23 @@ pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
     normalize_path(&relative)
 }
 
-/// Normalizes a path to use forward slashes on all platforms.
+/// Normalizes a path for pattern matching.
+///
+/// - Converts backslashes to forward slashes (Windows)
+/// - Strips leading `./` prefix (walker returns `./foo` when started from `.`)
 #[cfg(windows)]
 fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    let s = path.to_string_lossy().replace('\\', "/");
+    s.strip_prefix("./").unwrap_or(&s).to_string()
 }
 
-/// Normalizes a path to use forward slashes on all platforms.
+/// Normalizes a path for pattern matching.
+///
+/// Strips leading `./` prefix (walker returns `./foo` when started from `.`).
 #[cfg(not(windows))]
 fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
+    let s = path.to_string_lossy();
+    s.strip_prefix("./").unwrap_or(&s).to_string()
 }
 
 #[cfg(test)]

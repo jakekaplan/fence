@@ -320,3 +320,55 @@ fn missing_config_file_returns_error() {
         Ok(_) => panic!("expected error, got Ok"),
     }
 }
+
+#[test]
+fn exclude_pattern_with_globstar() {
+    // Tests that `**/.git/**` pattern works (user-reported workaround)
+    let temp = TempDir::new().unwrap();
+    write_file(
+        &temp,
+        "loq.toml",
+        "default_max_lines = 10\nexclude = [\"**/.git/**\"]\n",
+    );
+    write_file(&temp, ".git/logs/HEAD", "a\n");
+    write_file(&temp, "src/app.py", "b\n");
+
+    let output = run_check(
+        vec![temp.path().to_path_buf()],
+        CheckOptions {
+            config_path: Some(temp.path().join("loq.toml")),
+            cwd: temp.path().to_path_buf(),
+            use_cache: false,
+        },
+    )
+    .unwrap();
+
+    let file_names: Vec<_> = output
+        .outcomes
+        .iter()
+        .map(|o| o.display_path.as_str())
+        .collect();
+
+    // .git/logs/HEAD should be excluded by pattern
+    assert!(
+        !file_names.iter().any(|p| p.contains(".git")),
+        "**/.git/** should be excluded, got: {file_names:?}"
+    );
+    // src/app.py should be present
+    assert!(
+        file_names.iter().any(|p| p.contains("app.py")),
+        "src/app.py should be present, got: {file_names:?}"
+    );
+}
+
+#[test]
+fn normalize_path_strips_leading_dot_slash() {
+    // Verify normalize_path strips "./" prefix - key fix for exclude patterns
+    assert_eq!(normalize_path(Path::new("./foo/bar")), "foo/bar");
+    assert_eq!(
+        normalize_path(Path::new("./.git/logs/HEAD")),
+        ".git/logs/HEAD"
+    );
+    assert_eq!(normalize_path(Path::new("foo/bar")), "foo/bar");
+    assert_eq!(normalize_path(Path::new(".")), ".");
+}
