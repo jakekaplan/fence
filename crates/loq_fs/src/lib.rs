@@ -66,6 +66,9 @@ fn load_config_from_path(path: &Path, fallback_cwd: &Path) -> Result<CompiledCon
     let root_dir = path
         .parent()
         .map_or_else(|| fallback_cwd.to_path_buf(), Path::to_path_buf);
+    // Canonicalize root_dir so pathdiff works correctly with canonicalized file paths.
+    // On Windows, canonicalize returns extended-length paths (\\?\C:\...).
+    let root_dir = root_dir.canonicalize().unwrap_or(root_dir);
     let text = std::fs::read_to_string(path).map_err(|error| FsError::ConfigRead {
         path: path.to_path_buf(),
         error,
@@ -94,7 +97,11 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
         load_config_from_path(&config_path, &options.cwd)?
     } else {
         let config = LoqConfig::built_in_defaults();
-        compile_config(ConfigOrigin::BuiltIn, options.cwd.clone(), config, None)?
+        let root_dir = options
+            .cwd
+            .canonicalize()
+            .unwrap_or_else(|_| options.cwd.clone());
+        compile_config(ConfigOrigin::BuiltIn, root_dir, config, None)?
     };
 
     // Step 2: Load cache (if enabled) - cache lives at config root

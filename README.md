@@ -9,13 +9,22 @@ LLMs are great at generating code, but sometimes they go off the rails. You can 
 Big files mean more tokens. More tokens mean:
 
 - **Slower responses** - LLMs take longer to process what they don't need
-- **Higher costs** - You pay per token
-- **Worse output** - Context windows fill up, important details get lost
-- **Code rot** - Large files become dumping grounds that humans avoid refactoring
+- **Higher costs** - you pay per token
+- **Worse output** - context windows fill up, important details get lost
+- **Code rot** - large files become dumping grounds that humans avoid refactoring
 
 loq stops the sprawl before it starts.
 
-## Install
+## Table of contents
+
+1. [Getting started](#getting-started)
+2. [Configuration](#configuration)
+3. [Contributing](#contributing)
+4. [License](#license)
+
+## Getting started
+
+### Installation
 
 ```bash
 # With uv (recommended)
@@ -28,40 +37,16 @@ pip install loq
 cargo install loq
 ```
 
-## Quick start
+### Usage
 
 ```bash
-# Zero-config check (500 line default)
-loq check
-
-# Check specific paths
-loq check src/ lib/
-
-# Check staged files in pre-commit
-git diff --cached --name-only | loq check -
+loq                   # Check current directory (zero-config, 500 line default)
+loq check src/ lib/   # Check specific paths
+loq init              # Create loq.toml with defaults
+loq init --baseline   # Lock existing files at current size
 ```
 
-## LLM-first design
-
-loq is built for AI coding workflows. Output is token-efficient:
-
-```
-✖  1,427 > 500   src/components/Dashboard.tsx
-✖    892 > 500   src/utils/helpers.py
-2 violations (14ms)
-```
-
-No walls of text. No redundant explanations. Just what you need to fix.
-
-Use `-v` for additional context when debugging:
-
-```
-✖  1,427 > 500   src/components/Dashboard.tsx
-                  ├─ rule:   max-lines=500 severity=error (match: **/*.tsx)
-                  └─ config: loq.toml
-```
-
-## Pre-commit integration
+### Pre-commit
 
 ```yaml
 # .pre-commit-config.yaml
@@ -69,33 +54,39 @@ repos:
   - repo: local
     hooks:
       - id: loq
-        name: loq check
-        entry: loq check
+        name: loq
+        entry: loq
         language: system
         pass_filenames: false
 ```
 
-Now your LLM gets immediate feedback when it generates oversized files.
+### LLM-friendly output
 
-## Baseline legacy repos
+Output is designed to be token-efficient:
 
-Have a codebase with existing large files? Lock them at their current size:
-
-```bash
-loq init --baseline
+```
+✖  1,427 > 500   src/components/Dashboard.tsx
+✖    892 > 500   src/utils/helpers.py
+2 violations (14ms)
 ```
 
-This generates rules that allow existing files to stay at their current line count, but any growth triggers an error. Ratchet down over time.
+Use `loq -v` for additional context when debugging:
 
-## Config
+```
+✖  1,427 > 500   src/components/Dashboard.tsx
+                  ├─ rule:   max-lines=500 severity=error (match: **/*.tsx)
+                  └─ config: loq.toml
+```
 
-Create a config with sensible defaults:
+## Configuration
+
+loq works out of the box with sensible defaults. Create a config file to customize:
 
 ```bash
 loq init
 ```
 
-Example `loq.toml`:
+### Example
 
 ```toml
 default_max_lines = 500
@@ -106,21 +97,21 @@ exclude = ["**/generated/**", "**/vendor/**"]
 [[rules]]
 path = "**/*.tsx"
 max_lines = 300
-severity = "warning"   # warn but don't fail
+severity = "warning"
 
 [[rules]]
 path = "tests/**/*"
-max_lines = 600        # tests can be longer
+max_lines = 600
 ```
 
-### Config options
+### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `default_max_lines` | `500` | Limit for files not matching any rule |
 | `respect_gitignore` | `true` | Skip files matched by `.gitignore` |
 | `exclude` | `[]` | Glob patterns to skip |
-| `rules` | `[]` | Path-specific overrides (last match wins) |
+| `rules` | `[]` | Path-specific overrides |
 
 ### Rule options
 
@@ -128,24 +119,40 @@ max_lines = 600        # tests can be longer
 |--------|---------|-------------|
 | `path` | required | Glob pattern(s) to match |
 | `max_lines` | required | Line limit for matched files |
-| `severity` | `"error"` | `"error"` (fails check) or `"warning"` (reports only) |
+| `severity` | `"error"` | `"error"` or `"warning"` |
 
-Config discovery walks upward from each file and uses the nearest `loq.toml`.
+### Baseline
 
-## CLI reference
+Have a codebase with existing large files? Lock them at their current size:
 
 ```bash
-loq check [PATHS...]   # Check files (default: current directory)
-loq init               # Create loq.toml with defaults
-loq init --baseline    # Create loq.toml locking current violations
-
-# Flags
--q, --quiet            # Suppress summary
---silent               # Suppress all output
--v, --verbose          # Show rule/config details
---config <PATH>        # Use specific config file
+loq init --baseline
 ```
+
+This generates rules that allow existing files to stay at their current line count, but any growth triggers an error. Ratchet down over time.
+
+### CLI reference
+
+```
+loq [OPTIONS] [COMMAND]
+
+Commands:
+  check   Check files (default)
+  init    Create loq.toml
+
+Options:
+  -q, --quiet       Suppress summary
+      --silent      Suppress all output
+  -v, --verbose     Show rule/config details
+      --config      Path to loq.toml
+  -h, --help        Print help
+  -V, --version     Print version
+```
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-MIT.
+MIT
