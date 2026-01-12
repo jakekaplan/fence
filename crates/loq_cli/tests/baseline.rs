@@ -1,4 +1,4 @@
-//! Integration tests for the baseline command.
+//! Integration tests for the baseline command - core functionality.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
@@ -182,6 +182,7 @@ fn threshold_flag() {
 
 #[test]
 fn preserves_glob_rules() {
+    // Glob rules should be preserved when baseline adds new rules
     let temp = TempDir::new().unwrap();
     let config = r#"default_max_lines = 500
 
@@ -191,7 +192,8 @@ path = "**/*.rs"
 max_lines = 1000
 "#;
     write_file(&temp, "loq.toml", config);
-    write_file(&temp, "src/big.rs", &repeat_lines(600));
+    // .txt file not covered by glob rule, should be baselined
+    write_file(&temp, "src/big.txt", &repeat_lines(600));
 
     cargo_bin_cmd!("loq")
         .current_dir(temp.path())
@@ -201,10 +203,12 @@ max_lines = 1000
         .stdout(predicate::str::contains("Added 1 rule"));
 
     let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+    // Glob rule preserved
     assert!(updated.contains("path = \"**/*.rs\""));
     assert!(updated.contains("max_lines = 1000"));
     assert!(updated.contains("# Important policy rule"));
-    assert!(updated.contains("src/big.rs"));
+    // New baseline rule added
+    assert!(updated.contains("src/big.txt"));
     assert!(updated.contains("max_lines = 600"));
 }
 
@@ -388,4 +392,39 @@ exclude = ["generated/**", "vendor/**", "*.gen.rs"]
     assert!(!updated.contains("generated/code.txt"));
     assert!(!updated.contains("vendor/lib.txt"));
     assert!(!updated.contains("foo.gen.rs"));
+}
+
+#[test]
+fn skips_files_covered_by_glob_rules() {
+    // Files that pass their effective limit (from glob rules) should NOT be baselined
+    let temp = TempDir::new().unwrap();
+    let config = r#"default_max_lines = 500
+
+# Policy: test files can be longer
+[[rules]]
+path = "tests/**"
+max_lines = 800
+"#;
+    write_file(&temp, "loq.toml", config);
+
+    // test file at 750 lines - above default (500) but below glob rule (800)
+    write_file(&temp, "tests/big_test.txt", &repeat_lines(750));
+    // src file at 600 - above default, should be baselined
+    write_file(&temp, "src/main.txt", &repeat_lines(600));
+
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["baseline"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Added 1 rule"));
+
+    let updated = std::fs::read_to_string(temp.path().join("loq.toml")).unwrap();
+
+    // src/main.txt should be baselined (no glob rule covers it)
+    assert!(updated.contains("\"src/main.txt\""));
+    assert!(updated.contains("max_lines = 600"));
+
+    // tests/big_test.txt should NOT be baselined (covered by glob rule, passes)
+    assert!(!updated.contains("big_test.txt"));
 }

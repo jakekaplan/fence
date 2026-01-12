@@ -106,6 +106,12 @@ Run `loq baseline` periodically to ratchet down. It automatically:
 - **Updates** rules when files shrink (tightens the limit)
 - **Removes** rules when files drop below the threshold
 
+Files that grow beyond their baseline are left unchanged by default—increasing limits defeats the purpose of the fence. If you must, use `--relax`:
+
+```bash
+loq baseline --relax   # Also update limits for files that grew
+```
+
 Use `--threshold` to override the default limit:
 
 ```bash

@@ -54,4 +54,8 @@ pub struct BaselineArgs {
     /// Line threshold for baseline (defaults to `default_max_lines` from config).
     #[arg(long = "threshold")]
     pub threshold: Option<usize>,
+
+    /// Allow increasing limits for files that grew beyond their baseline.
+    #[arg(long = "relax")]
+    pub relax: bool,
 }

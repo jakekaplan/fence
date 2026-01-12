@@ -70,7 +70,7 @@ fn run_baseline_inner(args: &BaselineArgs) -> Result<BaselineStats> {
     let existing_rules = collect_exact_path_rules(&doc);
 
     // Step 5: Compute changes
-    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules);
+    let stats = apply_baseline_changes(&mut doc, &violations, &existing_rules, args.relax);
 
     // Step 6: Write config back
     std::fs::write(&config_path, doc.to_string())
@@ -119,7 +119,9 @@ fn normalize_display_path(path: &str) -> String {
 }
 
 /// Build a temporary config for violation scanning.
-/// Uses `toml_edit` to properly escape exclude patterns.
+/// Copies glob rules (policy) but not exact-path rules (baseline).
+/// This ensures files covered by glob policy rules are properly evaluated,
+/// while baselined files are evaluated against the threshold.
 #[allow(clippy::cast_possible_wrap)]
 fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
     let mut temp_doc = DocumentMut::new();
@@ -139,6 +141,24 @@ fn build_temp_config(doc: &DocumentMut, threshold: usize) -> String {
         temp_doc["exclude"] = Item::Value(toml_edit::Value::Array(exclude_array.clone()));
     } else {
         temp_doc["exclude"] = Item::Value(toml_edit::Value::Array(toml_edit::Array::default()));
+    }
+
+    // Copy only glob rules (policy), not exact-path rules (baseline)
+    if let Some(rules_array) = doc.get("rules").and_then(Item::as_array_of_tables) {
+        let mut glob_rules = toml_edit::ArrayOfTables::new();
+        for rule in rules_array {
+            if let Some(path_value) = rule.get("path") {
+                let paths = extract_paths(path_value);
+                // Only copy rules with glob patterns (not exact paths)
+                let is_glob = paths.iter().any(|p| !is_exact_path(p));
+                if is_glob {
+                    glob_rules.push(rule.clone());
+                }
+            }
+        }
+        if !glob_rules.is_empty() {
+            temp_doc["rules"] = Item::ArrayOfTables(glob_rules);
+        }
     }
 
     temp_doc.to_string()
@@ -189,6 +209,7 @@ fn apply_baseline_changes(
     doc: &mut DocumentMut,
     violations: &HashMap<String, usize>,
     existing_rules: &HashMap<String, (usize, usize)>,
+    relax: bool,
 ) -> BaselineStats {
     let mut stats = BaselineStats {
         added: 0,
@@ -202,12 +223,17 @@ fn apply_baseline_changes(
     // Process existing exact-path rules
     for (path, (current_limit, idx)) in existing_rules {
         if let Some(&actual) = violations.get(path) {
-            // File still violates - update if it shrunk
+            // File still violates - update if it changed size
             if actual < *current_limit {
+                // File shrunk - always tighten the limit
+                update_rule_max_lines(doc, *idx, actual);
+                stats.updated += 1;
+            } else if actual > *current_limit && relax {
+                // File grew - only update if --relax is set
                 update_rule_max_lines(doc, *idx, actual);
                 stats.updated += 1;
             }
-            // If actual >= current_limit, leave unchanged (file grew or stayed same)
+            // If actual == current_limit, or grew without --relax, leave unchanged
         } else {
             // File is now compliant (under threshold) - remove the rule
             indices_to_remove.push(*idx);
