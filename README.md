@@ -6,9 +6,7 @@
 [![Crates.io](https://img.shields.io/crates/v/loq)](https://crates.io/crates/loq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An electric fence for LLM-generated code.
-
-LLMs are great at generating code, but sometimes they go off the rails. You can tell an LLM what to do, but the only way to **guarantee** it listens is with feedback loops and hard constraints. loq provides that constraint: a fast, dead-simple way to enforce file size limits.
+An electric fence for LLMs (and humans too)
 
 ## Why file size matters
 
@@ -22,9 +20,9 @@ loq stops the sprawl before it starts.
 
 ## Why loq?
 
-Linters like Ruff and ESLint check correctness. loq checks size.
+LLMs are great at generating code, but sometimes they go off the rails. You can tell an LLM what to do, but the only way to **guarantee** it listens is with feedback loops and hard constraints. loq provides that constraint: a fast, dead-simple way to enforce file size limits.
 
-It does one thing: enforce line counts (`wc -l` style). No parsers, no plugins, language agnostic. One tool for your entire polyglot monorepo.
+Linters like Ruff and ESLint check correctness. loq checks size. It does one thing: enforce line counts (`wc -l` style). No parsers, no plugins, language agnostic. One tool for your entire polyglot monorepo.
 
 ## Getting started
 

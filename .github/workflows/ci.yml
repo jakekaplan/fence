@@ -5,6 +5,20 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -13,15 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Format
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Loq (self-check)
         run: cargo run -p loq -- check .
@@ -32,13 +37,19 @@ jobs:
       - name: Doc tests
         run: cargo test --doc
 
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Coverage
         run: |
           cargo llvm-cov --workspace --lcov --output-path lcov.info
           cargo llvm-cov report --fail-under-lines 95
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
