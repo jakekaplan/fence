@@ -7,7 +7,6 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use ignore::gitignore::Gitignore;
 use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
@@ -41,8 +40,6 @@ pub struct WalkResult {
 pub struct WalkOptions<'a> {
     /// Whether to respect `.gitignore` files during walking.
     pub respect_gitignore: bool,
-    /// Pre-loaded gitignore matcher (for filtering explicit paths).
-    pub gitignore: Option<&'a Gitignore>,
     /// Exclude patterns from config.
     pub exclude: &'a PatternList,
     /// Root directory for relative path matching.
@@ -54,7 +51,10 @@ pub struct WalkOptions<'a> {
 /// Directories are walked recursively. Non-existent paths are included
 /// (to be reported as missing later). Uses parallel walking for performance.
 ///
-/// All exclusion filtering (gitignore + exclude patterns) happens here.
+/// **Gitignore behavior (matches ruff):**
+/// - Explicit file paths bypass gitignore (if you name a file, you want it checked)
+/// - Directory walks respect gitignore via the `ignore` crate
+/// - Exclude patterns from config always apply to both
 #[must_use]
 pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     let mut files = Vec::new();
@@ -67,8 +67,8 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
                 files.extend(result.paths);
                 errors.extend(result.errors);
             } else {
-                // Explicit file path - filter through gitignore + exclude
-                if !is_excluded(path, options) {
+                // Explicit file path - bypass gitignore (like ruff), but respect exclude patterns
+                if !is_excluded_explicit(path, options) {
                     files.push(path.clone());
                 }
             }
@@ -84,24 +84,16 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     }
 }
 
-/// Checks if a path should be excluded (hardcoded, gitignore, or exclude pattern).
-fn is_excluded(path: &Path, options: &WalkOptions) -> bool {
+/// Checks if an explicit file path should be excluded (hardcoded or exclude pattern).
+///
+/// Explicit paths bypass gitignore (following ruff's model: if you name a file, you want it checked).
+fn is_excluded_explicit(path: &Path, options: &WalkOptions) -> bool {
     // Check hardcoded excludes first
     if is_hardcoded_exclude(path) {
         return true;
     }
 
-    // Check gitignore (needs PathBuf for matched_path_or_any_parents)
-    if let Some(gitignore) = options.gitignore {
-        let relative =
-            pathdiff::diff_paths(path, options.root_dir).unwrap_or_else(|| path.to_path_buf());
-        let matched = gitignore.matched_path_or_any_parents(&relative, false);
-        if matched.is_ignore() && !matched.is_whitelist() {
-            return true;
-        }
-    }
-
-    // Check exclude patterns
+    // Check exclude patterns (but NOT gitignore - explicit paths bypass it)
     let relative_str = relative_path_str(path, options.root_dir);
     options.exclude.matches(&relative_str).is_some()
 }
@@ -206,7 +198,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -225,7 +216,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -250,7 +240,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: true,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -279,7 +268,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -302,7 +290,6 @@ mod tests {
         let exclude = exclude_pattern("**/*.txt");
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -324,7 +311,6 @@ mod tests {
         let exclude = exclude_pattern("**/*.txt");
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -346,7 +332,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -373,7 +358,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -396,7 +380,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -419,7 +402,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };
@@ -441,7 +423,6 @@ mod tests {
         let exclude = empty_exclude();
         let options = WalkOptions {
             respect_gitignore: false,
-            gitignore: None,
             exclude: &exclude,
             root_dir: root,
         };

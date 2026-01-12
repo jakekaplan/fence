@@ -221,12 +221,16 @@ fn apply_baseline_changes(
         remove_rule(doc, idx);
     }
 
-    // Add new rules for violations not already covered
-    for (path, &actual) in violations {
-        if !existing_rules.contains_key(path) {
-            add_rule(doc, path, actual);
-            stats.added += 1;
-        }
+    // Add new rules for violations not already covered (sorted for deterministic output)
+    let mut new_violations: Vec<_> = violations
+        .iter()
+        .filter(|(path, _)| !existing_rules.contains_key(*path))
+        .collect();
+    new_violations.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+    for (path, &actual) in new_violations {
+        add_rule(doc, path, actual);
+        stats.added += 1;
     }
 
     stats

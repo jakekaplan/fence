@@ -211,3 +211,39 @@ max_lines = 1
         .failure()
         .stdout(predicate::str::contains("match: **/*.rs"));
 }
+
+#[test]
+fn old_v1_cache_is_migrated_to_v2() {
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, "loq.toml", "default_max_lines = 500\n");
+    write_file(&temp, "a.txt", "hello\n");
+
+    // Write a v1 format cache file (old format with `lines` field)
+    let v1_cache = r#"{"version":1,"config_hash":123,"entries":{"a.txt":{"mtime_secs":0,"mtime_nanos":0,"lines":1}}}"#;
+    write_file(&temp, ".loq_cache", v1_cache);
+
+    // Run check - should succeed and migrate the cache
+    cargo_bin_cmd!("loq")
+        .current_dir(temp.path())
+        .args(["check", "a.txt"])
+        .assert()
+        .success();
+
+    // Verify cache was rewritten as v2
+    let cache_contents = std::fs::read_to_string(temp.path().join(".loq_cache")).unwrap();
+    let cache: serde_json::Value = serde_json::from_str(&cache_contents).unwrap();
+    assert_eq!(cache["version"], 2, "cache should be upgraded to v2");
+    // v2 format uses `result` field with enum, not `lines`
+    let entries = cache["entries"].as_object().unwrap();
+    assert!(!entries.is_empty(), "cache should have entries");
+    for (_key, entry) in entries {
+        assert!(
+            entry.get("result").is_some(),
+            "v2 cache entries should have 'result' field"
+        );
+        assert!(
+            entry.get("lines").is_none(),
+            "v2 cache entries should not have 'lines' field"
+        );
+    }
+}

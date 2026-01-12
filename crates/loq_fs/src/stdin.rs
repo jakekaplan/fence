@@ -2,19 +2,28 @@
 //!
 //! Parses newline-delimited file paths, resolving relative paths
 //! against the current working directory.
+//!
+//! Note: Paths must be valid UTF-8. Non-UTF-8 paths will cause an error.
+//! This is a practical limitation - most real-world paths are UTF-8.
 
-use std::io::{Read, Result as IoResult};
+use std::io::{BufRead, BufReader, Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 
 /// Reads file paths from a reader (typically stdin).
 ///
 /// Paths are separated by newlines. Relative paths are resolved against `cwd`.
-/// Empty lines are skipped.
+/// Empty lines are skipped. Uses streaming line-by-line reading to avoid
+/// loading the entire input into memory at once.
+///
+/// # Errors
+///
+/// Returns an error if reading fails or if the input contains invalid UTF-8.
 pub fn read_paths(reader: &mut dyn Read, cwd: &Path) -> IoResult<Vec<PathBuf>> {
-    let mut input = String::new();
-    reader.read_to_string(&mut input)?;
+    let buf_reader = BufReader::new(reader);
     let mut paths = Vec::new();
-    for line in input.lines() {
+
+    for line_result in buf_reader.lines() {
+        let line = line_result?;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;

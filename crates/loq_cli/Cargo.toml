@@ -28,6 +28,7 @@ assert_cmd = "2"
 insta = "1"
 predicates = "3"
 regex = "1"
+serde_json.workspace = true
 
 [lints]
 workspace = true

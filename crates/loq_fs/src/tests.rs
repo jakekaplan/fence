@@ -100,7 +100,8 @@ fn binary_and_unreadable_are_reported() {
 }
 
 #[test]
-fn gitignore_is_respected_by_default() {
+fn explicit_file_bypasses_gitignore() {
+    // Following ruff's model: explicit file paths bypass gitignore
     let temp = TempDir::new().unwrap();
     write_file(&temp, ".gitignore", "ignored.txt\n");
     let file = write_file(&temp, "ignored.txt", "a\n");
@@ -115,8 +116,44 @@ fn gitignore_is_respected_by_default() {
     )
     .unwrap();
 
-    // Gitignored files are silently filtered out - no outcome at all
-    assert!(output.outcomes.is_empty());
+    // Explicit file bypasses gitignore - it gets checked
+    assert_eq!(output.outcomes.len(), 1);
+    assert!(matches!(output.outcomes[0].kind, OutcomeKind::Pass { .. }));
+}
+
+#[test]
+fn directory_walk_respects_gitignore() {
+    // Directory walks still respect gitignore
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, ".gitignore", "ignored.txt\n");
+    write_file(&temp, "ignored.txt", "a\n");
+    write_file(&temp, "included.txt", "b\n");
+
+    let output = run_check(
+        vec![temp.path().to_path_buf()],
+        CheckOptions {
+            config_path: None,
+            cwd: temp.path().to_path_buf(),
+            use_cache: false,
+        },
+    )
+    .unwrap();
+
+    // Directory walk respects gitignore - ignored.txt is filtered out
+    // Only included.txt and .gitignore should be in outcomes
+    let file_names: Vec<_> = output
+        .outcomes
+        .iter()
+        .map(|o| o.display_path.as_str())
+        .collect();
+    assert!(
+        !file_names.iter().any(|p| p.contains("ignored.txt")),
+        "ignored.txt should be filtered out, got: {file_names:?}"
+    );
+    assert!(
+        file_names.iter().any(|p| p.contains("included.txt")),
+        "included.txt should be present, got: {file_names:?}"
+    );
 }
 
 #[test]
@@ -196,16 +233,18 @@ fn one_over_limit_violates() {
 }
 
 #[test]
-fn gitignore_negation_pattern_whitelists_file() {
+fn gitignore_negation_works_in_directory_walk() {
+    // Gitignore with negation pattern - tested via directory walk
     let temp = TempDir::new().unwrap();
     // Ignore all .log files, but whitelist important.log
     write_file(&temp, ".gitignore", "*.log\n!important.log\n");
 
-    let ignored = write_file(&temp, "debug.log", "ignored\n");
-    let whitelisted = write_file(&temp, "important.log", "not ignored\n");
+    write_file(&temp, "debug.log", "ignored\n");
+    write_file(&temp, "important.log", "not ignored\n");
 
+    // Walk directory instead of passing explicit files
     let output = run_check(
-        vec![ignored.clone(), whitelisted.clone()],
+        vec![temp.path().to_path_buf()],
         CheckOptions {
             config_path: None,
             cwd: temp.path().to_path_buf(),
@@ -214,27 +253,50 @@ fn gitignore_negation_pattern_whitelists_file() {
     )
     .unwrap();
 
-    // Canonicalize for comparison (o.path is canonicalized, handles /var -> /private/var on macOS)
-    let ignored_canonical = ignored.canonicalize().unwrap_or(ignored);
-    let whitelisted_canonical = whitelisted.canonicalize().unwrap_or(whitelisted);
+    let file_names: Vec<_> = output
+        .outcomes
+        .iter()
+        .map(|o| o.display_path.as_str())
+        .collect();
 
-    // debug.log should be filtered out (not in outcomes)
-    let outcome_ignored = output.outcomes.iter().find(|o| o.path == ignored_canonical);
+    // debug.log should be filtered out by gitignore
     assert!(
-        outcome_ignored.is_none(),
-        "debug.log should be filtered out, but found {outcome_ignored:?}"
+        !file_names.iter().any(|p| p.contains("debug.log")),
+        "debug.log should be filtered out, got: {file_names:?}"
     );
 
     // important.log should NOT be excluded (whitelisted by negation pattern)
-    let outcome_whitelisted = output
-        .outcomes
-        .iter()
-        .find(|o| o.path == whitelisted_canonical)
-        .unwrap();
     assert!(
-        matches!(outcome_whitelisted.kind, OutcomeKind::Pass { .. }),
-        "important.log should pass (whitelisted), got {:?}",
-        outcome_whitelisted.kind
+        file_names.iter().any(|p| p.contains("important.log")),
+        "important.log should pass (whitelisted), got: {file_names:?}"
+    );
+}
+
+#[test]
+fn explicit_files_bypass_gitignore_even_with_negation() {
+    // Explicit files bypass gitignore entirely (following ruff's model)
+    let temp = TempDir::new().unwrap();
+    write_file(&temp, ".gitignore", "*.log\n!important.log\n");
+
+    let ignored = write_file(&temp, "debug.log", "ignored\n");
+    let whitelisted = write_file(&temp, "important.log", "not ignored\n");
+
+    // Pass explicit files - both should be checked (gitignore bypassed)
+    let output = run_check(
+        vec![ignored, whitelisted],
+        CheckOptions {
+            config_path: None,
+            cwd: temp.path().to_path_buf(),
+            use_cache: false,
+        },
+    )
+    .unwrap();
+
+    // Both files should be present - explicit paths bypass gitignore
+    assert_eq!(
+        output.outcomes.len(),
+        2,
+        "Both explicit files should be checked"
     );
 }
 

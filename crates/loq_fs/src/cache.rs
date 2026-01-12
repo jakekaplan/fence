@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use loq_core::config::CompiledConfig;
 
-const CACHE_VERSION: u32 = 1;
+const CACHE_VERSION: u32 = 2; // Bumped for CachedResult enum
 const CACHE_FILE: &str = ".loq_cache";
 
 /// On-disk cache format (for deserialization).
@@ -33,12 +33,24 @@ struct CacheFileRef<'a> {
     entries: &'a FxHashMap<String, CacheEntry>,
 }
 
+/// Cached inspection result for a file.
+///
+/// Only cacheable results are included - missing/unreadable files can't be cached
+/// because we need an mtime for cache invalidation, and `metadata()` fails for those.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CachedResult {
+    /// File is text with given line count.
+    Text(usize),
+    /// File is binary.
+    Binary,
+}
+
 /// Single cache entry for a file.
 #[derive(Serialize, Deserialize, Clone)]
 struct CacheEntry {
     mtime_secs: u64,
     mtime_nanos: u32,
-    lines: usize,
+    result: CachedResult,
 }
 
 /// In-memory cache for file line counts.
@@ -92,34 +104,34 @@ impl Cache {
         }
     }
 
-    /// Looks up cached line count. Returns None if not cached or mtime doesn't match.
+    /// Looks up cached result. Returns None if not cached or mtime doesn't match.
     #[must_use]
-    pub fn get(&self, key: &str, mtime: SystemTime) -> Option<usize> {
+    pub fn get(&self, key: &str, mtime: SystemTime) -> Option<CachedResult> {
         let entry = self.entries.get(key)?;
         let (secs, nanos) = mtime_to_parts(mtime);
 
         if entry.mtime_secs == secs && entry.mtime_nanos == nanos {
-            Some(entry.lines)
+            Some(entry.result)
         } else {
             None
         }
     }
 
-    /// Stores line count in cache.
-    pub fn insert(&mut self, key: String, mtime: SystemTime, lines: usize) {
+    /// Stores inspection result in cache.
+    pub fn insert(&mut self, key: String, mtime: SystemTime, result: CachedResult) {
         let (secs, nanos) = mtime_to_parts(mtime);
         self.entries.insert(
             key,
             CacheEntry {
                 mtime_secs: secs,
                 mtime_nanos: nanos,
-                lines,
+                result,
             },
         );
         self.dirty = true;
     }
 
-    /// Saves cache to disk. Silently ignores errors.
+    /// Saves cache to disk. Silently ignores errors (caching is best-effort).
     pub fn save(&self, root: &Path) {
         if !self.dirty {
             return;
@@ -193,13 +205,26 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_get() {
+    fn insert_and_get_text() {
         let mut cache = Cache::with_hash(123);
         let mtime = SystemTime::now();
 
-        cache.insert("src/main.rs".to_string(), mtime, 42);
+        cache.insert("src/main.rs".to_string(), mtime, CachedResult::Text(42));
 
-        assert_eq!(cache.get("src/main.rs", mtime), Some(42));
+        assert_eq!(
+            cache.get("src/main.rs", mtime),
+            Some(CachedResult::Text(42))
+        );
+    }
+
+    #[test]
+    fn insert_and_get_binary() {
+        let mut cache = Cache::with_hash(123);
+        let mtime = SystemTime::now();
+
+        cache.insert("image.png".to_string(), mtime, CachedResult::Binary);
+
+        assert_eq!(cache.get("image.png", mtime), Some(CachedResult::Binary));
     }
 
     #[test]
@@ -208,7 +233,7 @@ mod tests {
         let mtime1 = SystemTime::UNIX_EPOCH;
         let mtime2 = SystemTime::now();
 
-        cache.insert("src/main.rs".to_string(), mtime1, 42);
+        cache.insert("src/main.rs".to_string(), mtime1, CachedResult::Text(42));
 
         assert!(cache.get("src/main.rs", mtime2).is_none());
     }
@@ -218,15 +243,17 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let config_hash = 12345;
 
-        // Create and populate cache
+        // Create and populate cache with different result types
         let mut cache = Cache::with_hash(config_hash);
         let mtime = SystemTime::UNIX_EPOCH;
-        cache.insert("test.rs".to_string(), mtime, 100);
+        cache.insert("test.rs".to_string(), mtime, CachedResult::Text(100));
+        cache.insert("binary.dat".to_string(), mtime, CachedResult::Binary);
         cache.save(temp.path());
 
         // Load cache
         let loaded = Cache::load(temp.path(), config_hash);
-        assert_eq!(loaded.get("test.rs", mtime), Some(100));
+        assert_eq!(loaded.get("test.rs", mtime), Some(CachedResult::Text(100)));
+        assert_eq!(loaded.get("binary.dat", mtime), Some(CachedResult::Binary));
     }
 
     #[test]
@@ -235,12 +262,66 @@ mod tests {
 
         // Save with one config hash
         let mut cache = Cache::with_hash(111);
-        cache.insert("test.rs".to_string(), SystemTime::UNIX_EPOCH, 100);
+        cache.insert(
+            "test.rs".to_string(),
+            SystemTime::UNIX_EPOCH,
+            CachedResult::Text(100),
+        );
         cache.save(temp.path());
 
         // Load with different config hash
         let loaded = Cache::load(temp.path(), 222);
         assert!(loaded.get("test.rs", SystemTime::UNIX_EPOCH).is_none());
+    }
+
+    #[test]
+    fn old_cache_version_is_discarded_and_rebuilt_as_v2() {
+        let temp = TempDir::new().unwrap();
+        let config_hash = 12345u64;
+
+        // Write a cache file with old version format (v1 used `lines: usize` instead of `result`)
+        let old_cache = serde_json::json!({
+            "version": 1,
+            "config_hash": config_hash,
+            "entries": {
+                "test.rs": {
+                    "mtime_secs": 0,
+                    "mtime_nanos": 0,
+                    "lines": 100
+                }
+            }
+        });
+        fs::write(temp.path().join(CACHE_FILE), old_cache.to_string()).unwrap();
+
+        // Loading should discard the old cache and return empty
+        let mut loaded = Cache::load(temp.path(), config_hash);
+        assert!(
+            loaded.get("test.rs", SystemTime::UNIX_EPOCH).is_none(),
+            "old v1 cache should be discarded"
+        );
+
+        // Insert new entry and save
+        let mtime = SystemTime::UNIX_EPOCH;
+        loaded.insert("new.rs".to_string(), mtime, CachedResult::Text(50));
+        loaded.save(temp.path());
+
+        // Verify the saved cache is v2 format
+        let contents = fs::read_to_string(temp.path().join(CACHE_FILE)).unwrap();
+        let saved: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(saved["version"], 2, "saved cache should be v2");
+        assert!(
+            saved["entries"]["new.rs"]["result"].is_object()
+                || saved["entries"]["new.rs"]["result"].is_string(),
+            "v2 cache should have 'result' field, not 'lines'"
+        );
+
+        // Verify it can be reloaded
+        let reloaded = Cache::load(temp.path(), config_hash);
+        assert_eq!(
+            reloaded.get("new.rs", mtime),
+            Some(CachedResult::Text(50)),
+            "v2 cache should roundtrip correctly"
+        );
     }
 
     #[test]
@@ -263,7 +344,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let cache = Cache::with_hash(123);
 
-        // Save without any inserts
+        // Save without any inserts - nothing written because not dirty
         cache.save(temp.path());
 
         // Cache file should not exist

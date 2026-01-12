@@ -494,6 +494,7 @@ dependencies = [
  "loq_fs",
  "predicates",
  "regex",
+ "serde_json",
  "tempfile",
  "termcolor",
  "toml_edit",

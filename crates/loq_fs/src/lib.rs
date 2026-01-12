@@ -15,7 +15,6 @@ pub mod walk;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use loq_core::config::{compile_config, CompiledConfig, ConfigOrigin, LoqConfig};
 use loq_core::decide::{decide, Decision};
 use loq_core::report::{FileOutcome, OutcomeKind};
@@ -39,9 +38,6 @@ pub enum FsError {
         /// The underlying I/O error.
         error: std::io::Error,
     },
-    /// Gitignore parsing error.
-    #[error("{0}")]
-    Gitignore(String),
 }
 
 /// Options for running a check.
@@ -113,17 +109,15 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     };
     let file_cache = Mutex::new(file_cache);
 
-    // Step 3: Load gitignore once (if enabled)
-    let gitignore = if compiled.respect_gitignore {
-        load_gitignore(&options.cwd)?
-    } else {
-        None
-    };
+    // Step 3: Canonicalize cwd once (instead of per-file)
+    let cwd_abs = options
+        .cwd
+        .canonicalize()
+        .unwrap_or_else(|_| options.cwd.clone());
 
     // Step 4: Walk paths, filtering through gitignore + exclude patterns
     let walk_options = walk::WalkOptions {
         respect_gitignore: compiled.respect_gitignore,
-        gitignore: gitignore.as_ref(),
         exclude: compiled.exclude_patterns(),
         root_dir: &compiled.root_dir,
     };
@@ -134,7 +128,7 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
     file_list.dedup();
 
     // Step 5: Check all files in parallel
-    let outcomes = check_group(&file_list, &compiled, &options.cwd, &file_cache);
+    let outcomes = check_group(&file_list, &compiled, &cwd_abs, &file_cache);
 
     // Step 6: Save cache (if enabled) - cache lives at config root
     if options.use_cache {
@@ -152,30 +146,27 @@ pub fn run_check(paths: Vec<PathBuf>, options: CheckOptions) -> Result<CheckOutp
 fn check_group(
     paths: &[PathBuf],
     compiled: &CompiledConfig,
-    cwd: &Path,
+    cwd_abs: &Path,
     file_cache: &Mutex<cache::Cache>,
 ) -> Vec<FileOutcome> {
     paths
         .par_iter()
-        .map(|path| check_file(path, compiled, cwd, file_cache))
+        .map(|path| check_file(path, compiled, cwd_abs, file_cache))
         .collect()
 }
 
 fn check_file(
     path: &Path,
     compiled: &CompiledConfig,
-    cwd: &Path,
+    cwd_abs: &Path,
     file_cache: &Mutex<cache::Cache>,
 ) -> FileOutcome {
     // Canonicalize to get absolute path for consistent matching.
     // Falls back to joining with cwd for non-existent files.
-    let abs_path = path.canonicalize().unwrap_or_else(|_| cwd.join(path));
-    // Also canonicalize cwd so pathdiff::diff_paths works correctly on Windows
-    // (where canonicalize returns extended-length paths like \\?\C:\...).
-    let cwd_abs = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+    let abs_path = path.canonicalize().unwrap_or_else(|_| cwd_abs.join(path));
 
     let display_path = normalize_path(
-        &pathdiff::diff_paths(&abs_path, &cwd_abs).unwrap_or_else(|| abs_path.clone()),
+        &pathdiff::diff_paths(&abs_path, cwd_abs).unwrap_or_else(|| abs_path.clone()),
     );
     let config_source = compiled.origin.clone();
 
@@ -211,35 +202,28 @@ fn check_file_lines(
     // Try cache first (using relative path as key for consistency across directories)
     if let Some(mt) = mtime {
         if let Ok(cache) = file_cache.lock() {
-            if let Some(lines) = cache.get(cache_key, mt) {
-                return if lines > limit {
-                    OutcomeKind::Violation {
-                        limit,
-                        actual: lines,
-                        matched_by,
-                    }
-                } else {
-                    OutcomeKind::Pass {
-                        limit,
-                        actual: lines,
-                        matched_by,
-                    }
-                };
+            if let Some(result) = cache.get(cache_key, mt) {
+                return cached_result_to_outcome(result, limit, matched_by);
             }
         }
     }
 
     // Cache miss - read file
     match count::inspect_file(path) {
-        Ok(count::FileInspection::Binary) => OutcomeKind::Binary,
-        Ok(count::FileInspection::Text { lines }) => {
-            // Update cache on successful read
+        Ok(count::FileInspection::Binary) => {
             if let Some(mt) = mtime {
                 if let Ok(mut cache) = file_cache.lock() {
-                    cache.insert(cache_key.to_string(), mt, lines);
+                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Binary);
                 }
             }
-
+            OutcomeKind::Binary
+        }
+        Ok(count::FileInspection::Text { lines }) => {
+            if let Some(mt) = mtime {
+                if let Ok(mut cache) = file_cache.lock() {
+                    cache.insert(cache_key.to_string(), mt, cache::CachedResult::Text(lines));
+                }
+            }
             if lines > limit {
                 OutcomeKind::Violation {
                     limit,
@@ -254,10 +238,36 @@ fn check_file_lines(
                 }
             }
         }
+        // Missing/Unreadable can't be cached (no mtime available)
         Err(count::CountError::Missing) => OutcomeKind::Missing,
         Err(count::CountError::Unreadable(error)) => OutcomeKind::Unreadable {
             error: error.to_string(),
         },
+    }
+}
+
+fn cached_result_to_outcome(
+    result: cache::CachedResult,
+    limit: usize,
+    matched_by: loq_core::MatchBy,
+) -> OutcomeKind {
+    match result {
+        cache::CachedResult::Text(lines) => {
+            if lines > limit {
+                OutcomeKind::Violation {
+                    limit,
+                    actual: lines,
+                    matched_by,
+                }
+            } else {
+                OutcomeKind::Pass {
+                    limit,
+                    actual: lines,
+                    matched_by,
+                }
+            }
+        }
+        cache::CachedResult::Binary => OutcomeKind::Binary,
     }
 }
 
@@ -279,19 +289,6 @@ fn normalize_path(path: &Path) -> String {
 #[cfg(not(windows))]
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
-}
-
-fn load_gitignore(root: &Path) -> Result<Option<Gitignore>, FsError> {
-    let path = root.join(".gitignore");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let mut builder = GitignoreBuilder::new(root);
-    builder.add(path);
-    let gitignore = builder
-        .build()
-        .map_err(|err| FsError::Gitignore(err.to_string()))?;
-    Ok(Some(gitignore))
 }
 
 #[cfg(test)]

@@ -10,6 +10,9 @@ use std::path::Path;
 use memchr::{memchr, memchr_iter};
 use thiserror::Error;
 
+/// Buffer size for reading files (8 KiB for fewer syscalls).
+const BUF_SIZE: usize = 8192;
+
 /// Result of inspecting a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileInspection {
@@ -43,7 +46,7 @@ pub fn inspect_file(path: &Path) -> Result<FileInspection, CountError> {
         _ => CountError::Unreadable(err),
     })?;
 
-    let mut buf = [0u8; 4096];
+    let mut buf = [0u8; BUF_SIZE];
     let mut read = file.read(&mut buf).map_err(CountError::Unreadable)?;
     if read == 0 {
         return Ok(FileInspection::Text { lines: 0 });
@@ -144,7 +147,7 @@ mod tests {
 
     #[test]
     fn count_large_file_multiple_chunks() {
-        // Buffer size is 8192 bytes, so create file larger than that
+        // Create file larger than BUF_SIZE to test multi-chunk reading
         let mut content = Vec::new();
         for i in 0..1000 {
             content.extend_from_slice(format!("line number {i}\n").as_bytes());
@@ -169,10 +172,10 @@ mod tests {
 
     #[test]
     fn binary_detection_only_checks_first_chunk() {
-        // Current behavior: null bytes are only detected in the first 8KB chunk.
+        // Current behavior: null bytes are only detected in the first chunk (BUF_SIZE).
         // A file with null bytes AFTER the first chunk is treated as text.
         // This is a deliberate performance trade-off.
-        let mut content = vec![b'a'; 8192]; // Fill first chunk with 'a'
+        let mut content = vec![b'a'; super::BUF_SIZE]; // Fill first chunk with 'a'
         content.push(0); // Null byte in second chunk
         content.push(b'\n');
         let file = write_temp(&content);
