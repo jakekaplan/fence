@@ -121,32 +121,15 @@ fn baseline_config(cwd: &Path) -> Result<String> {
 
 fn default_config_text(baseline: &[BaselineEntry]) -> String {
     let mut out = String::new();
-    let exclude = loq_core::LoqConfig::init_template().exclude;
 
     writeln!(out, "default_max_lines = 500").unwrap();
-    writeln!(out).unwrap();
     writeln!(out, "respect_gitignore = true").unwrap();
     writeln!(out).unwrap();
-
-    write_toml_array(&mut out, "exclude", &exclude, true);
-
-    writeln!(
-        out,
-        "# Last match wins. Put general rules first and overrides later."
-    )
-    .unwrap();
-    writeln!(out, "[[rules]]").unwrap();
-    writeln!(out, "path = \"**/*.tsx\"").unwrap();
-    writeln!(out, "max_lines = 300").unwrap();
-    writeln!(out, "severity = \"warning\"").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "[[rules]]").unwrap();
-    writeln!(out, "path = \"tests/**/*\"").unwrap();
-    write!(out, "max_lines = 500").unwrap();
+    writeln!(out, "# Paths, files, or glob patterns to exclude").unwrap();
+    writeln!(out, "exclude = []").unwrap();
 
     // Baseline rules: one per file, locked at current line count
     if !baseline.is_empty() {
-        writeln!(out).unwrap();
         writeln!(out).unwrap();
         writeln!(
             out,
@@ -159,22 +142,21 @@ fn default_config_text(baseline: &[BaselineEntry]) -> String {
             writeln!(out, "path = \"{}\"", entry.path).unwrap();
             write!(out, "max_lines = {}", entry.lines).unwrap();
         }
+    } else {
+        writeln!(out).unwrap();
+        writeln!(
+            out,
+            "# Rules override defaults for specific paths. Last match wins."
+        )
+        .unwrap();
+        writeln!(out, "# [[rules]]").unwrap();
+        writeln!(out, "# path = \"src/legacy/**/*\"").unwrap();
+        writeln!(out, "# severity = \"warning\"").unwrap();
+        writeln!(out, "#").unwrap();
+        writeln!(out, "# [[rules]]").unwrap();
+        writeln!(out, "# path = \"**/*.generated.rs\"").unwrap();
+        write!(out, "# max_lines = 1000").unwrap();
     }
 
     out
-}
-
-fn write_toml_array(out: &mut String, name: &str, items: &[String], trailing_newline: bool) {
-    if items.is_empty() {
-        writeln!(out, "{name} = []").unwrap();
-    } else {
-        writeln!(out, "{name} = [").unwrap();
-        for item in items {
-            writeln!(out, "  \"{item}\",").unwrap();
-        }
-        writeln!(out, "]").unwrap();
-    }
-    if trailing_newline {
-        writeln!(out).unwrap();
-    }
 }

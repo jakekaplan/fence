@@ -36,3 +36,6 @@ bench.json
 .DS_Store
 Thumbs.db
 plans/
+
+# Loq
+.loq_cache
