@@ -50,15 +50,11 @@ git diff --name-only | loq check -         # Check files from stdin
 ### Pre-commit
 
 ```yaml
-# .pre-commit-config.yaml
 repos:
-  - repo: local
+  - repo: https://github.com/jakekaplan/loq
+    rev: v0.1.0a3
     hooks:
       - id: loq
-        name: loq
-        entry: loq
-        language: system
-        pass_filenames: false
 ```
 
 ### LLM-friendly output

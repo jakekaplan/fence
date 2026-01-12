@@ -1,0 +1,6 @@
+- id: loq
+  name: loq
+  entry: loq
+  language: python
+  pass_filenames: false
+  always_run: true
