@@ -1,7 +1,14 @@
 default_max_lines = 500
-
 respect_gitignore = true
 
-exclude = [
-  "**/Cargo.lock",
-]
+# Paths, files, or glob patterns to exclude
+exclude = []
+
+# Rules override defaults for specific paths. Last match wins.
+# [[rules]]
+# path = "**/*.ext"
+# max_lines = 300
+#
+# [[rules]]
+# path = "some/path/**/*"
+# max_lines = 1000
