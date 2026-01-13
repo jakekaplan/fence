@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768279278331,
+  "lastUpdate": 1768280036009,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -47,6 +47,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12522010454000002,
             "range": "± 0.0008",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b8661124d0fee03aa3414222a4925b9d2a9099e6",
+          "message": "Merge pull request #13 from jakekaplan/update-readme\n\nwritten in rust",
+          "timestamp": "2026-01-12T23:53:04-05:00",
+          "tree_id": "efb441f36a3e98e8e662c857b089b969a13cf579",
+          "url": "https://github.com/jakekaplan/loq/commit/b8661124d0fee03aa3414222a4925b9d2a9099e6"
+        },
+        "date": 1768280035600,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05209474060000001,
+            "range": "± 0.0017",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14276361070000002,
+            "range": "± 0.0009",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.05894779730000001,
+            "range": "± 0.0006",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.126465383,
+            "range": "± 0.0016",
             "unit": "seconds"
           }
         ]
