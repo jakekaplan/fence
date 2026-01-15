@@ -7,18 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An electric fence for LLMs (and humans too). Written in Rust.
+loq enforces file line limits: fast, zero-config, and language agnostic.
 
-## Why loq?
-
-Big files burn tokens. That means slower responses, higher costs, and context rot where large files become dumping grounds that overwhelm both LLMs and humans.
-
-You can tell an LLM what to do, but the only way to **guarantee** it listens is with hard constraints. loq provides that constraint: a fast, dead-simple way to enforce file size limits.
-
-Linters like Ruff and ESLint check correctness. loq checks size. One thing: line counts (`wc -l` style). No parsers, no plugins, language agnostic. One tool for your entire polyglot monorepo.
-
-## Getting started
-
-### Installation
+## Quickstart
 
 ```bash
 # With uv (recommended)
@@ -31,8 +22,6 @@ pip install loq
 cargo install loq
 ```
 
-### Usage
-
 ```bash
 loq                                # Check current directory (500 line default)
 loq check src/ lib/                # Check specific paths
@@ -40,19 +29,16 @@ git diff --name-only | loq check - # Check files from stdin
 loq accept-defeat                  # Bump limits for current violations
 ```
 
-### Pre-commit
+## Why loq?
 
-```yaml
-repos:
-  - repo: https://github.com/jakekaplan/loq
-    rev: v0.1.0a4
-    hooks:
-      - id: loq
-```
+- Hard limits on file size to prevent context rot
+- One metric: line counts (`wc -l` style)
+- No parsers, no plugins, no config required
+- LLM-friendly output and fast Rust core
 
-### LLM-friendly output
+## Output
 
-Output is designed to be token-efficient:
+Token-efficient by default:
 
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
@@ -60,7 +46,7 @@ Output is designed to be token-efficient:
 2 violations (14ms)
 ```
 
-Use `loq -v` for additional context:
+Use `loq -v` for more context:
 
 ```
 ✖  1_427 > 500   src/components/Dashboard.tsx
@@ -79,21 +65,15 @@ exclude = [".git/**", "**/generated/**", "*.lock"]
 [[rules]]                     # last match wins, ** matches any path
 path = "**/*.tsx"
 max_lines = 300
-
-[[rules]]
-path = "tests/**"
-max_lines = 600
 ```
 
-### Fix guidance
-
-Add `fix_guidance` to show project-specific instructions with violations—useful when piping to LLMs:
+Add `fix_guidance` to include project-specific instructions with violations:
 
 ```toml
 fix_guidance = "Split large files: helpers → src/utils/, types → src/types/"
 ```
 
-### Baseline
+## Managing legacy files
 
 Existing large files? Baseline them and ratchet down over time:
 
@@ -102,14 +82,9 @@ loq init       # Create loq.toml first
 loq baseline   # Add rules for files over the limit
 ```
 
-Run periodically. It automatically:
-- **Tightens** limits when files shrink
-- **Removes** rules when files drop below the threshold
-- **Ignores** files that grew (use `--allow-growth` to override)
-
-Use `--threshold 300` to set a custom limit.
-
-### Accept defeat
+Run periodically. It tightens limits as files shrink, removes rules once files
+are under the threshold, and ignores files that grew (use `--allow-growth` to
+override). Use `--threshold 300` to set a custom limit.
 
 Need to ship while files are still too big? Accept defeat creates or updates
 exact-path rules for the files currently failing checks:
@@ -122,6 +97,16 @@ loq accept-defeat --buffer 50    # Add 50 lines above current size
 
 It never edits glob rules; it only adds exact-path overrides at the end of the
 `[[rules]]` list.
+
+## Automation
+
+```yaml
+repos:
+  - repo: https://github.com/jakekaplan/loq
+    rev: v0.1.0a4
+    hooks:
+      - id: loq
+```
 
 ## Contributing
 
