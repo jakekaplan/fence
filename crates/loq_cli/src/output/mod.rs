@@ -109,20 +109,15 @@ pub fn write_finding<W: WriteColor>(
 }
 
 pub(crate) fn write_path<W: WriteColor>(writer: &mut W, path: &str) -> io::Result<()> {
-    let mut dir_spec = dimmed();
-    dir_spec.set_fg(Some(Color::White));
-    let mut file_spec = bold();
-    file_spec.set_fg(Some(Color::White));
-
     if let Some(pos) = path.rfind('/') {
         let (dir, file) = path.split_at(pos + 1);
-        writer.set_color(&dir_spec)?;
+        writer.set_color(&dimmed())?;
         write!(writer, "{dir}")?;
         writer.reset()?;
-        writer.set_color(&file_spec)?;
+        writer.set_color(&bold())?;
         write!(writer, "{file}")?;
     } else {
-        writer.set_color(&file_spec)?;
+        writer.set_color(&bold())?;
         write!(writer, "{path}")?;
     }
     writer.reset()
