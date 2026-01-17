@@ -1,4 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
+use serde_json::Value;
 use std::path::PathBuf;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -13,23 +14,14 @@ fn strip_ansi(s: &str) -> String {
     re.replace_all(s, "").to_string()
 }
 
-/// Normalize output for snapshot comparison:
-/// - Strip ANSI codes
-/// - Replace timing with placeholder
-fn normalize(s: &str) -> String {
-    let s = strip_ansi(s);
-    let re = regex::Regex::new(r"\(\d+m?s\)").unwrap();
-    re.replace_all(&s, "(TIME)").to_string()
-}
-
 fn run_loq(fixture: &str) -> (String, String, bool) {
     let output = cargo_bin_cmd!("loq")
         .current_dir(fixture_path(fixture))
         .output()
         .unwrap();
 
-    let stdout = normalize(&String::from_utf8_lossy(&output.stdout));
-    let stderr = normalize(&String::from_utf8_lossy(&output.stderr));
+    let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
     (stdout, stderr, output.status.success())
 }
 
@@ -40,8 +32,8 @@ fn run_loq_with_args(fixture: &str, args: &[&str]) -> (String, String, bool) {
         .output()
         .unwrap();
 
-    let stdout = normalize(&String::from_utf8_lossy(&output.stdout));
-    let stderr = normalize(&String::from_utf8_lossy(&output.stderr));
+    let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
     (stdout, stderr, output.status.success())
 }
 
@@ -53,8 +45,8 @@ fn run_loq_with_stdin(fixture: &str, args: &[&str], stdin: &str) -> (String, Str
         .output()
         .unwrap();
 
-    let stdout = normalize(&String::from_utf8_lossy(&output.stdout));
-    let stderr = normalize(&String::from_utf8_lossy(&output.stderr));
+    let stdout = strip_ansi(&String::from_utf8_lossy(&output.stdout));
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
     (stdout, stderr, output.status.success())
 }
 
@@ -173,4 +165,63 @@ fn fix_guidance_shown_on_violation() {
     assert!(!success, "should fail with violation");
     assert!(stderr.is_empty(), "stderr should be empty");
     insta::assert_snapshot!(stdout);
+}
+
+// JSON output tests
+
+fn run_loq_json(fixture: &str) -> (Value, bool) {
+    let output = cargo_bin_cmd!("loq")
+        .current_dir(fixture_path(fixture))
+        .args(["check", "--output-format", "json"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: Value = serde_json::from_str(&stdout).expect("should be valid JSON");
+    (json, output.status.success())
+}
+
+#[test]
+fn json_output_empty_directory() {
+    let (json, success) = run_loq_json("empty_directory");
+    assert!(success, "should succeed with no files");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
+}
+
+#[test]
+fn json_output_all_ok() {
+    let (json, success) = run_loq_json("all_ok");
+    assert!(success, "should succeed when all files are ok");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
+}
+
+#[test]
+fn json_output_one_violation() {
+    let (json, success) = run_loq_json("one_violation");
+    assert!(!success, "should fail with violation");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
+}
+
+#[test]
+fn json_output_pass_and_fail() {
+    let (json, success) = run_loq_json("pass_and_fail");
+    assert!(!success, "should fail when there's an error");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
+}
+
+#[test]
+fn json_output_multiple_rules() {
+    let (json, success) = run_loq_json("multiple_rules");
+    assert!(!success, "should fail when rule is violated");
+    insta::assert_json_snapshot!(json, {
+        ".version" => "[version]",
+    });
 }

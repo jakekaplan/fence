@@ -1,0 +1,12 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+expression: json
+---
+{
+  "summary": {
+    "files_checked": 2,
+    "violations": 0
+  },
+  "version": "[version]",
+  "violations": []
+}

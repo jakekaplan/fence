@@ -106,8 +106,6 @@ pub struct Summary {
     pub passed: usize,
     /// Files with violations.
     pub errors: usize,
-    /// Time taken in milliseconds.
-    pub duration_ms: u128,
 }
 
 /// The complete report from a check run.
@@ -127,15 +125,10 @@ pub struct Report {
 /// Findings are sorted with skip warnings first, then violations by overage.
 /// If `fix_guidance` is provided and there are violations, it will be included in the report.
 #[must_use]
-pub fn build_report(
-    outcomes: &[FileOutcome],
-    duration_ms: u128,
-    fix_guidance: Option<String>,
-) -> Report {
+pub fn build_report(outcomes: &[FileOutcome], fix_guidance: Option<String>) -> Report {
     let mut findings = Vec::new();
     let mut summary = Summary {
         total: outcomes.len(),
-        duration_ms,
         ..Summary::default()
     };
 
@@ -302,7 +295,7 @@ mod tests {
                 },
             },
         ];
-        let report = build_report(&outcomes, 0, None);
+        let report = build_report(&outcomes, None);
         assert_eq!(report.summary.total, 6);
         assert_eq!(report.summary.passed, 1);
         assert_eq!(report.summary.errors, 2);
@@ -355,7 +348,7 @@ mod tests {
             config_source: ConfigOrigin::BuiltIn,
             kind: OutcomeKind::NoLimit,
         }];
-        let report = build_report(&outcomes, 0, None);
+        let report = build_report(&outcomes, None);
         assert_eq!(report.summary.total, 1);
         assert_eq!(report.summary.skipped, 1);
         assert_eq!(report.summary.passed, 0);
@@ -377,7 +370,7 @@ mod tests {
             },
         }];
         let guidance = Some("Split large files into smaller modules.".to_string());
-        let report = build_report(&outcomes, 0, guidance);
+        let report = build_report(&outcomes, guidance);
         assert_eq!(report.summary.errors, 1);
         assert!(report.fix_guidance.is_some());
         assert_eq!(
@@ -399,7 +392,7 @@ mod tests {
             },
         }];
         let guidance = Some("Split large files into smaller modules.".to_string());
-        let report = build_report(&outcomes, 0, guidance);
+        let report = build_report(&outcomes, guidance);
         assert_eq!(report.summary.errors, 0);
         assert!(report.fix_guidance.is_none());
     }

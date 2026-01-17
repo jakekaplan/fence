@@ -47,23 +47,15 @@ pub fn format_summary(summary: &Summary) -> String {
         "errors"
     };
     format!(
-        "{} files checked, {} skipped, {} passed, {} {} ({}ms)",
-        summary.total,
-        summary.skipped,
-        summary.passed,
-        summary.errors,
-        error_label,
-        summary.duration_ms
+        "{} files checked, {} skipped, {} passed, {} {}",
+        summary.total, summary.skipped, summary.passed, summary.errors, error_label,
     )
 }
 
 /// Formats a success message when all checks pass.
 #[must_use]
 pub fn format_success(summary: &Summary) -> String {
-    format!(
-        "All checks passed! ({} files in {}ms)",
-        summary.total, summary.duration_ms
-    )
+    format!("All checks passed! ({} files)", summary.total)
 }
 
 #[cfg(test)]
@@ -116,7 +108,6 @@ mod tests {
             skipped: 0,
             passed: 0,
             errors: 1,
-            duration_ms: 5,
         };
         let line = format_summary(&summary);
         assert!(line.contains("1 error"));
@@ -129,7 +120,6 @@ mod tests {
             skipped: 0,
             passed: 1,
             errors: 2,
-            duration_ms: 5,
         };
         let line = format_summary(&summary);
         assert!(line.contains("2 errors"));
@@ -158,9 +148,8 @@ mod tests {
             skipped: 2,
             passed: 8,
             errors: 0,
-            duration_ms: 42,
         };
         let line = format_success(&summary);
-        assert_eq!(line, "All checks passed! (10 files in 42ms)");
+        assert_eq!(line, "All checks passed! (10 files)");
     }
 }

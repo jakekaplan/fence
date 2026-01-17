@@ -14,7 +14,7 @@ mod init;
 mod output;
 
 use std::ffi::OsString;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -63,7 +63,7 @@ pub fn run_with<I, R, W1, W2>(args: I, mut stdin: R, stdout: &mut W1, stderr: &m
 where
     I: IntoIterator<Item = OsString>,
     R: Read,
-    W1: WriteColor,
+    W1: WriteColor + Write,
     W2: WriteColor,
 {
     let cli = Cli::parse_from(args);
@@ -72,6 +72,7 @@ where
     let default_check = Command::Check(cli::CheckArgs {
         paths: vec![],
         no_cache: false,
+        output_format: cli::OutputFormat::Text,
     });
     match cli.command.as_ref().unwrap_or(&default_check) {
         Command::Check(args) => run_check(args, &mut stdin, stdout, stderr, mode),

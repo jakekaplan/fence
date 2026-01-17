@@ -1,0 +1,19 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+expression: json
+---
+{
+  "summary": {
+    "files_checked": 1,
+    "violations": 1
+  },
+  "version": "[version]",
+  "violations": [
+    {
+      "lines": 20,
+      "max_lines": 10,
+      "path": "toolong.rs",
+      "rule": "default"
+    }
+  ]
+}
