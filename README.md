@@ -10,11 +10,11 @@ An electric fence for LLMs (and humans too). Written in Rust,
 `loq` enforces file line limits: fast, zero-config, and language agnostic.
 
 ## Why loq?
-- Hard limits to prevent oversized files and context rot
-- One metric: line counts (`wc -l` style)
-- Works everywhere - no language-specific setup
-- Designed specifically with coding agents in mind
-- Lightning fast Rust core
+- 🔒 Hard limits to prevent oversized files and context rot
+- 📏 One metric: line counts (`wc -l` style)
+- 🧩 Works everywhere - no language-specific setup
+- 🤖 Designed specifically with coding agents in mind
+- 🦀 Lightning fast Rust core
 
 ## Getting Started
 
