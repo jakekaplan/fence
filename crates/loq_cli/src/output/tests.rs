@@ -192,12 +192,9 @@ fn write_summary_with_violations() {
         skipped: 2,
         passed: 5,
         errors: 3,
-        duration_ms: 42,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    // Compact format: "3 violations (42ms)"
     assert!(out.contains("3 violations"));
-    assert!(out.contains("42ms"));
 }
 
 #[test]
@@ -207,13 +204,10 @@ fn write_summary_all_passed() {
         skipped: 0,
         passed: 5,
         errors: 0,
-        duration_ms: 10,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    // Compact format: "✔ 5 files ok (10ms)"
     assert!(out.contains("✔"));
     assert!(out.contains("5 files ok"));
-    assert!(out.contains("10ms"));
 }
 
 #[test]
@@ -223,13 +217,10 @@ fn write_summary_single_violation() {
         skipped: 0,
         passed: 0,
         errors: 1,
-        duration_ms: 5,
     };
     let out = output_string(|w| write_summary(w, &summary));
-    // Singular: "1 violation (5ms)"
     assert!(out.contains("1 violation"));
     assert!(!out.contains("violations"));
-    assert!(out.contains("5ms"));
 }
 
 #[test]

@@ -50,6 +50,39 @@ Use `loq -v` for more context:
                   └─ rule: max-lines=500 (match: **/*.tsx)
 ```
 
+### JSON output
+
+Use `--output-format json` for machine-readable output:
+
+```bash
+loq check --output-format json
+```
+
+```json
+{
+  "version": "0.1.0",
+  "violations": [
+    {
+      "path": "src/main.rs",
+      "lines": 1427,
+      "max_lines": 500,
+      "rule": "default"
+    }
+  ],
+  "skip_warnings": [],
+  "walk_errors": [],
+  "summary": {
+    "files_checked": 42,
+    "skipped": 0,
+    "passed": 41,
+    "violations": 1,
+    "walk_errors": 0
+  }
+}
+```
+
+JSON output enables editor/IDE integrations, CI tooling pipelines, and programmatic consumption.
+
 ## Configuration
 
 loq works zero-config. Run `loq init` to customize:

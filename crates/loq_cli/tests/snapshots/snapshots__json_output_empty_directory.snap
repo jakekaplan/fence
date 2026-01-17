@@ -1,0 +1,17 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+expression: json
+---
+{
+  "skip_warnings": [],
+  "summary": {
+    "files_checked": 0,
+    "passed": 0,
+    "skipped": 0,
+    "violations": 0,
+    "walk_errors": 0
+  },
+  "version": "[version]",
+  "violations": [],
+  "walk_errors": []
+}

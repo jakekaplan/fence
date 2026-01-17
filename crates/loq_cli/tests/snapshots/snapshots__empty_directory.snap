@@ -1,6 +1,5 @@
 ---
 source: crates/loq_cli/tests/snapshots.rs
-assertion_line: 67
 expression: stdout
 ---
-✔ 0 files ok (TIME)
+✔ 0 files ok

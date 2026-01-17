@@ -1,0 +1,24 @@
+---
+source: crates/loq_cli/tests/snapshots.rs
+expression: json
+---
+{
+  "skip_warnings": [],
+  "summary": {
+    "files_checked": 3,
+    "passed": 2,
+    "skipped": 0,
+    "violations": 1,
+    "walk_errors": 0
+  },
+  "version": "[version]",
+  "violations": [
+    {
+      "lines": 15,
+      "max_lines": 10,
+      "path": "toolong.rs",
+      "rule": "*.rs"
+    }
+  ],
+  "walk_errors": []
+}

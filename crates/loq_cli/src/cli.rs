@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 /// Parsed command-line arguments.
 #[derive(Parser, Debug)]
@@ -30,6 +30,16 @@ pub enum Command {
     AcceptDefeat(AcceptDefeatArgs),
 }
 
+/// Output format for check results.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum OutputFormat {
+    /// Human-readable colored output.
+    #[default]
+    Text,
+    /// Machine-readable JSON output.
+    Json,
+}
+
 /// Arguments for the check command.
 #[derive(Args, Debug, Clone)]
 pub struct CheckArgs {
@@ -40,6 +50,10 @@ pub struct CheckArgs {
     /// Disable file caching.
     #[arg(long = "no-cache")]
     pub no_cache: bool,
+
+    /// Output format.
+    #[arg(long = "output-format", value_enum, default_value_t = OutputFormat::Text)]
+    pub output_format: OutputFormat,
 }
 
 /// Arguments for the init command.

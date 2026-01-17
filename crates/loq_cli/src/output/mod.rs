@@ -1,8 +1,12 @@
+mod json;
+
 use std::io;
 
 use loq_core::report::{Finding, FindingKind, SkipReason, Summary};
 use loq_fs::walk::WalkError;
 use termcolor::{Color, ColorSpec, WriteColor};
+
+pub use json::write_json;
 
 fn fg(color: Color) -> ColorSpec {
     let mut spec = ColorSpec::new();
@@ -158,17 +162,12 @@ pub fn write_summary<W: WriteColor>(writer: &mut W, summary: &Summary) -> io::Re
             "violations"
         };
         writer.set_color(&fg(Color::Red))?;
-        write!(writer, "{} {word}", summary.errors)?;
-        writer.reset()?;
-        writer.set_color(&dimmed())?;
-        writeln!(writer, " ({}ms)", summary.duration_ms)?;
+        writeln!(writer, "{} {word}", summary.errors)?;
     } else {
         writer.set_color(&fg(Color::Green))?;
         write!(writer, "✔")?;
         writer.reset()?;
-        write!(writer, " {} files ok", format_number(summary.passed))?;
-        writer.set_color(&dimmed())?;
-        writeln!(writer, " ({}ms)", summary.duration_ms)?;
+        writeln!(writer, " {} files ok", format_number(summary.passed))?;
     }
     writer.reset()
 }
