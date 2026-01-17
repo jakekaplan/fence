@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768499000434,
+  "lastUpdate": 1768687805081,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -287,6 +287,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12811400753999996,
             "range": "± 0.0013",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d686935d8cee8fe48625490720fa5f85c6f29017",
+          "message": "Merge pull request #26 from jakekaplan/output-format\n\nOutput format",
+          "timestamp": "2026-01-17T17:09:16-05:00",
+          "tree_id": "2d64cacfaf04dfa156d62664e9ae64d02264b93f",
+          "url": "https://github.com/jakekaplan/loq/commit/d686935d8cee8fe48625490720fa5f85c6f29017"
+        },
+        "date": 1768687804796,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.05126931330000001,
+            "range": "± 0.001",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.1461779688,
+            "range": "± 0.0052",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.0600281053,
+            "range": "± 0.0008",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12729993029999995,
+            "range": "± 0.0012",
             "unit": "seconds"
           }
         ]
