@@ -125,11 +125,14 @@ def update_crate_deps(crate_path: str, semver: str):
     path = REPO_ROOT / crate_path
     print(f"Updating {crate_path}...")
     content = path.read_text()
-    new_content = re.sub(
+    new_content, count = re.subn(
         r'(loq_(?:core|fs) = \{ path = "[^"]+", version = )"[^"]+"',
         rf'\1"{semver}"',
         content,
     )
+    if count == 0:
+        print(f"Error: No dependency versions found to update in {crate_path}", file=sys.stderr)
+        sys.exit(1)
     path.write_text(new_content)
 
 
@@ -146,31 +149,29 @@ def update_pyproject(pep440: str):
     path.write_text(new_content)
 
 
-def update_readme(semver: str) -> bool:
-    """Update README.md pre-commit rev. Returns True if updated."""
+def update_readme(semver: str):
+    """Update README.md pre-commit rev."""
     print("Updating README.md pre-commit rev...")
     path = REPO_ROOT / "README.md"
     content = path.read_text()
     lines = content.split("\n")
-    updated = False
+    found = False
     for i, line in enumerate(lines):
         if "repo: https://github.com/jakekaplan/loq" in line:
             # Search for rev: within the next few lines (handles comments/blank lines)
             for j in range(i + 1, min(i + 5, len(lines))):
                 if "rev:" in lines[j]:
-                    old_line = lines[j]
+                    found = True
                     lines[j] = re.sub(r"rev: v[^\s]+", f"rev: v{semver}", lines[j])
-                    updated = old_line != lines[j]
                     break
                 # Stop if we hit another repo: or end of YAML block
                 if "repo:" in lines[j] or lines[j].strip() == "```":
                     break
             break
-    if not updated:
-        print("Error: Could not update README.md pre-commit rev", file=sys.stderr)
+    if not found:
+        print("Error: Could not find README.md pre-commit rev to update", file=sys.stderr)
         sys.exit(1)
     path.write_text("\n".join(lines))
-    return updated
 
 
 def main():

@@ -79,6 +79,16 @@ def check_branch():
     print("ok")
 
 
+def check_working_tree():
+    print("Checking working tree...", end=" ", flush=True)
+    status = run(["git", "status", "--porcelain"], capture=True)
+    if status:
+        print("dirty")
+        print("Error: Working tree is not clean", file=sys.stderr)
+        sys.exit(1)
+    print("clean")
+
+
 def check_origin_sync():
     print("Fetching origin...")
     run(["git", "fetch", "origin"])
@@ -228,6 +238,7 @@ def main():
         sys.exit(1)
 
     check_branch()
+    check_working_tree()
     check_origin_sync()
     last_tag = find_last_tag()
 
