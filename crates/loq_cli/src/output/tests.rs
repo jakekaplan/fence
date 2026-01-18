@@ -237,8 +237,12 @@ fn print_error_returns_error_status() {
 #[test]
 fn write_walk_errors_verbose() {
     let errors = vec![
-        WalkError("path/to/bad".into()),
-        WalkError("another/error".into()),
+        WalkError {
+            message: "path/to/bad".into(),
+        },
+        WalkError {
+            message: "another/error".into(),
+        },
     ];
     let out = output_string(|w| write_walk_errors(w, &errors, true));
     assert!(out.contains("Skipped paths (2):"));
@@ -248,7 +252,9 @@ fn write_walk_errors_verbose() {
 
 #[test]
 fn write_walk_errors_non_verbose() {
-    let errors = vec![WalkError("path/to/bad".into())];
+    let errors = vec![WalkError {
+        message: "path/to/bad".into(),
+    }];
     let out = output_string(|w| write_walk_errors(w, &errors, false));
     assert!(out.contains("1 path(s) skipped"));
     assert!(out.contains("--verbose"));

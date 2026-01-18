@@ -11,7 +11,7 @@ use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
 
-use crate::relative_path_str;
+use crate::relative_path;
 
 /// Files/directories that are always excluded regardless of configuration.
 const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
@@ -25,8 +25,11 @@ fn is_hardcoded_exclude(path: &Path) -> bool {
 
 /// Error encountered while walking a directory.
 #[derive(Debug, Error)]
-#[error("{0}")]
-pub struct WalkError(pub String);
+#[error("{message}")]
+pub struct WalkError {
+    /// Error message for a skipped path.
+    pub message: String,
+}
 
 /// Result of expanding paths.
 pub struct WalkResult {
@@ -68,9 +71,10 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
                 errors.extend(result.errors);
             } else {
                 // Explicit file path - bypass gitignore (like ruff), but respect exclude patterns
-                if !is_excluded_explicit(path, options) {
-                    files.push(path.clone());
+                if should_skip_explicit_path(path, options) {
+                    continue;
                 }
+                files.push(path.clone());
             }
         } else {
             // Non-existent path - include to report as missing
@@ -84,18 +88,15 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     }
 }
 
-/// Checks if an explicit file path should be excluded (hardcoded or exclude pattern).
+/// Checks if an explicit file path should be skipped (hardcoded or exclude pattern).
 ///
 /// Explicit paths bypass gitignore (following ruff's model: if you name a file, you want it checked).
-fn is_excluded_explicit(path: &Path, options: &WalkOptions) -> bool {
-    // Check hardcoded excludes first
-    if is_hardcoded_exclude(path) {
-        return true;
-    }
-
-    // Check exclude patterns (but NOT gitignore - explicit paths bypass it)
-    let relative_str = relative_path_str(path, options.root_dir);
-    options.exclude.matches(&relative_str).is_some()
+fn should_skip_explicit_path(path: &Path, options: &WalkOptions) -> bool {
+    is_hardcoded_exclude(path)
+        || options
+            .exclude
+            .matches(&relative_path(path, options.root_dir))
+            .is_some()
 }
 
 fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
@@ -135,7 +136,9 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
                     }
                 }
                 Err(e) => {
-                    let _ = error_tx.send(WalkError(e.to_string()));
+                    let _ = error_tx.send(WalkError {
+                        message: e.to_string(),
+                    });
                 }
             }
             ignore::WalkState::Continue
@@ -150,8 +153,8 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
     let paths: Vec<PathBuf> = path_rx
         .into_iter()
         .filter(|p| {
-            let relative_str = relative_path_str(p, options.root_dir);
-            options.exclude.matches(&relative_str).is_none()
+            let relative_path = relative_path(p, options.root_dir);
+            options.exclude.matches(&relative_path).is_none()
         })
         .collect();
 

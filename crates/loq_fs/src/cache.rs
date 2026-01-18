@@ -57,7 +57,7 @@ struct CacheEntry {
 pub struct Cache {
     entries: FxHashMap<String, CacheEntry>,
     config_hash: u64,
-    dirty: bool,
+    has_unsaved_changes: bool,
 }
 
 impl Cache {
@@ -67,7 +67,7 @@ impl Cache {
         Self {
             entries: FxHashMap::default(),
             config_hash: 0,
-            dirty: false,
+            has_unsaved_changes: false,
         }
     }
 
@@ -77,30 +77,30 @@ impl Cache {
         let path = root.join(CACHE_FILE);
 
         let Ok(contents) = fs::read_to_string(&path) else {
-            return Self::with_hash(config_hash);
+            return Self::empty_with_hash(config_hash);
         };
 
         let Ok(cache_file) = serde_json::from_str::<CacheFile>(&contents) else {
-            return Self::with_hash(config_hash);
+            return Self::empty_with_hash(config_hash);
         };
 
         // Invalidate if version or config changed
         if cache_file.version != CACHE_VERSION || cache_file.config_hash != config_hash {
-            return Self::with_hash(config_hash);
+            return Self::empty_with_hash(config_hash);
         }
 
         Self {
             entries: cache_file.entries,
             config_hash,
-            dirty: false,
+            has_unsaved_changes: false,
         }
     }
 
-    fn with_hash(config_hash: u64) -> Self {
+    fn empty_with_hash(config_hash: u64) -> Self {
         Self {
             entries: FxHashMap::default(),
             config_hash,
-            dirty: false,
+            has_unsaved_changes: false,
         }
     }
 
@@ -128,12 +128,12 @@ impl Cache {
                 result,
             },
         );
-        self.dirty = true;
+        self.has_unsaved_changes = true;
     }
 
     /// Saves cache to disk. Silently ignores errors (caching is best-effort).
     pub fn save(&self, root: &Path) {
-        if !self.dirty {
+        if !self.has_unsaved_changes {
             return;
         }
 
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn insert_and_get_text() {
-        let mut cache = Cache::with_hash(123);
+        let mut cache = Cache::empty_with_hash(123);
         let mtime = SystemTime::now();
 
         cache.insert("src/main.rs".to_string(), mtime, CachedResult::Text(42));
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn insert_and_get_binary() {
-        let mut cache = Cache::with_hash(123);
+        let mut cache = Cache::empty_with_hash(123);
         let mtime = SystemTime::now();
 
         cache.insert("image.png".to_string(), mtime, CachedResult::Binary);
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn mtime_mismatch_returns_none() {
-        let mut cache = Cache::with_hash(123);
+        let mut cache = Cache::empty_with_hash(123);
         let mtime1 = SystemTime::UNIX_EPOCH;
         let mtime2 = SystemTime::now();
 
@@ -244,7 +244,7 @@ mod tests {
         let config_hash = 12345;
 
         // Create and populate cache with different result types
-        let mut cache = Cache::with_hash(config_hash);
+        let mut cache = Cache::empty_with_hash(config_hash);
         let mtime = SystemTime::UNIX_EPOCH;
         cache.insert("test.rs".to_string(), mtime, CachedResult::Text(100));
         cache.insert("binary.dat".to_string(), mtime, CachedResult::Binary);
@@ -261,7 +261,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
 
         // Save with one config hash
-        let mut cache = Cache::with_hash(111);
+        let mut cache = Cache::empty_with_hash(111);
         cache.insert(
             "test.rs".to_string(),
             SystemTime::UNIX_EPOCH,
@@ -340,11 +340,11 @@ mod tests {
     }
 
     #[test]
-    fn no_save_when_not_dirty() {
+    fn no_save_when_unchanged() {
         let temp = TempDir::new().unwrap();
-        let cache = Cache::with_hash(123);
+        let cache = Cache::empty_with_hash(123);
 
-        // Save without any inserts - nothing written because not dirty
+        // Save without any inserts - nothing written because unchanged
         cache.save(temp.path());
 
         // Cache file should not exist

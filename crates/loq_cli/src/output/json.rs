@@ -112,7 +112,7 @@ pub fn write_json<W: Write>(writer: &mut W, output: &CheckOutput) -> io::Result<
     let mut walk_errors: Vec<String> = output
         .walk_errors
         .iter()
-        .map(|error| error.0.clone())
+        .map(|error| error.message.clone())
         .collect();
     walk_errors.sort();
 
@@ -316,8 +316,12 @@ mod tests {
         let output = CheckOutput {
             outcomes: vec![],
             walk_errors: vec![
-                walk::WalkError("path/to/error1".into()),
-                walk::WalkError("path/to/error2".into()),
+                walk::WalkError {
+                    message: "path/to/error1".into(),
+                },
+                walk::WalkError {
+                    message: "path/to/error2".into(),
+                },
             ],
             fix_guidance: None,
         };

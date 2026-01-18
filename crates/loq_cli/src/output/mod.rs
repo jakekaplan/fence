@@ -186,7 +186,7 @@ pub fn write_walk_errors<W: WriteColor>(
     if verbose {
         writeln!(writer, "Skipped paths ({}):", errors.len())?;
         for error in errors {
-            writeln!(writer, "  {}", error.0)?;
+            writeln!(writer, "  {}", error.message)?;
         }
     } else {
         writeln!(
