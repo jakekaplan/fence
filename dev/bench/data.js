@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768697146626,
+  "lastUpdate": 1768701631843,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -527,6 +527,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12560179440000002,
             "range": "± 0.0017",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56f1682400430d17d8341d16b978593f12c6c081",
+          "message": "Merge pull request #31 from jakekaplan/rename-and-cleanup\n\nclearer naming",
+          "timestamp": "2026-01-17T20:59:32-05:00",
+          "tree_id": "c71f107c64c3334a1c340830d4b88599fbd7f3e2",
+          "url": "https://github.com/jakekaplan/loq/commit/56f1682400430d17d8341d16b978593f12c6c081"
+        },
+        "date": 1768701631079,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.04135588788000001,
+            "range": "± 0.0006",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.10979477557999999,
+            "range": "± 0.0031",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.04646040458,
+            "range": "± 0.0006",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.09775076228,
+            "range": "± 0.0005",
             "unit": "seconds"
           }
         ]
