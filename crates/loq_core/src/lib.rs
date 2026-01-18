@@ -10,14 +10,12 @@
 //! - [`parse`]: TOML parsing with unknown key detection and suggestions
 //! - [`decide`]: Rule matching logic (exclude → rules → default)
 //! - [`report`]: Outcome aggregation and finding generation
-//! - [`format`](mod@format): Human-readable output formatting
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod config;
 pub mod decide;
-pub mod format;
 pub mod parse;
 pub mod report;
 

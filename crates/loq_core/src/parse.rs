@@ -14,7 +14,7 @@ pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
     let deserializer = toml::Deserializer::new(text);
     let mut unknown = Vec::new();
     let parsed: LoqConfig = serde_ignored::deserialize(deserializer, |path| {
-        if let Some(key) = extract_key(&path) {
+        if let Some(key) = extract_unknown_key_name(&path) {
             unknown.push(key);
         }
     })
@@ -40,7 +40,7 @@ pub fn parse_config(path: &Path, text: &str) -> Result<LoqConfig, ConfigError> {
     Ok(parsed)
 }
 
-fn extract_key(path: &serde_ignored::Path) -> Option<String> {
+fn extract_unknown_key_name(path: &serde_ignored::Path) -> Option<String> {
     let path_str = path.to_string();
     let mut last = path_str.split('.').next_back().unwrap_or(&path_str);
     if let Some(pos) = last.find('[') {
@@ -195,22 +195,22 @@ mod tests {
     }
 
     #[test]
-    fn extract_key_with_array_index() {
+    fn extract_unknown_key_name_with_array_index() {
         let path = serde_ignored::Path::Map {
             parent: &serde_ignored::Path::Root,
             key: "rules[0]".to_string(),
         };
-        let key = extract_key(&path);
+        let key = extract_unknown_key_name(&path);
         assert_eq!(key, Some("rules".to_string()));
     }
 
     #[test]
-    fn extract_key_empty_returns_none() {
+    fn extract_unknown_key_name_empty_returns_none() {
         let path = serde_ignored::Path::Map {
             parent: &serde_ignored::Path::Root,
             key: "[0]".to_string(),
         };
-        let key = extract_key(&path);
+        let key = extract_unknown_key_name(&path);
         assert!(key.is_none());
     }
 

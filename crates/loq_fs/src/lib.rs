@@ -180,12 +180,12 @@ fn check_file(
         kind,
     };
 
-    let relative_str = relative_path_str(&abs_path, &compiled.root_dir);
+    let relative_path = relative_path(&abs_path, &compiled.root_dir);
 
-    let kind = match decide(compiled, &relative_str) {
+    let kind = match decide(compiled, &relative_path) {
         Decision::SkipNoLimit => OutcomeKind::NoLimit,
         Decision::Check { limit, matched_by } => {
-            check_file_lines(path, &relative_str, limit, matched_by, file_cache)
+            check_file_lines(path, &relative_path, limit, matched_by, file_cache)
         }
     };
 
@@ -277,7 +277,7 @@ fn cached_result_to_outcome(
 /// Computes a path relative to root, normalized to forward slashes.
 ///
 /// Falls back to the original path if it cannot be made relative.
-pub(crate) fn relative_path_str(path: &Path, root: &Path) -> String {
+pub(crate) fn relative_path(path: &Path, root: &Path) -> String {
     let relative = {
         #[cfg(windows)]
         {

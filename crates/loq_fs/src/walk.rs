@@ -11,7 +11,7 @@ use ignore::WalkBuilder;
 use loq_core::PatternList;
 use thiserror::Error;
 
-use crate::relative_path_str;
+use crate::relative_path;
 
 /// Files/directories that are always excluded regardless of configuration.
 const HARDCODED_EXCLUDES: &[&str] = &[".loq_cache", "loq.toml"];
@@ -25,8 +25,11 @@ fn is_hardcoded_exclude(path: &Path) -> bool {
 
 /// Error encountered while walking a directory.
 #[derive(Debug, Error)]
-#[error("{0}")]
-pub struct WalkError(pub String);
+#[error("{message}")]
+pub struct WalkError {
+    /// Error message for a skipped path.
+    pub message: String,
+}
 
 /// Result of expanding paths.
 pub struct WalkResult {
@@ -68,9 +71,10 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
                 errors.extend(result.errors);
             } else {
                 // Explicit file path - bypass gitignore (like ruff), but respect exclude patterns
-                if !is_excluded_explicit(path, options) {
-                    files.push(path.clone());
+                if should_skip_explicit_path(path, options) {
+                    continue;
                 }
+                files.push(path.clone());
             }
         } else {
             // Non-existent path - include to report as missing
@@ -84,18 +88,15 @@ pub fn expand_paths(paths: &[PathBuf], options: &WalkOptions) -> WalkResult {
     }
 }
 
-/// Checks if an explicit file path should be excluded (hardcoded or exclude pattern).
+/// Checks if an explicit file path should be skipped (hardcoded or exclude pattern).
 ///
 /// Explicit paths bypass gitignore (following ruff's model: if you name a file, you want it checked).
-fn is_excluded_explicit(path: &Path, options: &WalkOptions) -> bool {
-    // Check hardcoded excludes first
-    if is_hardcoded_exclude(path) {
-        return true;
-    }
-
-    // Check exclude patterns (but NOT gitignore - explicit paths bypass it)
-    let relative_str = relative_path_str(path, options.root_dir);
-    options.exclude.matches(&relative_str).is_some()
+fn should_skip_explicit_path(path: &Path, options: &WalkOptions) -> bool {
+    is_hardcoded_exclude(path)
+        || options
+            .exclude
+            .matches(&relative_path(path, options.root_dir))
+            .is_some()
 }
 
 fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
@@ -135,7 +136,9 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
                     }
                 }
                 Err(e) => {
-                    let _ = error_tx.send(WalkError(e.to_string()));
+                    let _ = error_tx.send(WalkError {
+                        message: e.to_string(),
+                    });
                 }
             }
             ignore::WalkState::Continue
@@ -150,8 +153,8 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
     let paths: Vec<PathBuf> = path_rx
         .into_iter()
         .filter(|p| {
-            let relative_str = relative_path_str(p, options.root_dir);
-            options.exclude.matches(&relative_str).is_none()
+            let relative_path = relative_path(p, options.root_dir);
+            options.exclude.matches(&relative_path).is_none()
         })
         .collect();
 
@@ -162,298 +165,4 @@ fn walk_directory(path: &PathBuf, options: &WalkOptions) -> WalkResult {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use loq_core::config::{compile_config, ConfigOrigin, LoqConfig};
-    use tempfile::TempDir;
-
-    fn empty_exclude() -> loq_core::PatternList {
-        let config = LoqConfig {
-            exclude: vec![],
-            ..LoqConfig::default()
-        };
-        let compiled =
-            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
-        compiled.exclude_patterns().clone()
-    }
-
-    fn exclude_pattern(pattern: &str) -> loq_core::PatternList {
-        let config = LoqConfig {
-            exclude: vec![pattern.to_string()],
-            ..LoqConfig::default()
-        };
-        let compiled =
-            compile_config(ConfigOrigin::BuiltIn, PathBuf::from("."), config, None).unwrap();
-        compiled.exclude_patterns().clone()
-    }
-
-    #[test]
-    fn expands_directory() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::write(root.join("a.txt"), "a").unwrap();
-        std::fs::create_dir_all(root.join("sub")).unwrap();
-        std::fs::write(root.join("sub/b.txt"), "b").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-        assert_eq!(result.paths.len(), 2);
-    }
-
-    #[test]
-    fn expands_file_and_missing() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        let file = root.join("a.txt");
-        std::fs::write(&file, "a").unwrap();
-        let missing = root.join("missing.txt");
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[file, missing], &options);
-        assert_eq!(result.paths.len(), 2);
-        assert!(result.paths.iter().any(|path| path.ends_with("a.txt")));
-        assert!(result
-            .paths
-            .iter()
-            .any(|path| path.ends_with("missing.txt")));
-    }
-
-    #[test]
-    fn respects_gitignore_when_enabled() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::create_dir(root.join("sub")).unwrap();
-        std::fs::write(root.join("sub/.gitignore"), "ignored.txt\n").unwrap();
-        std::fs::write(root.join("sub/ignored.txt"), "ignored").unwrap();
-        std::fs::write(root.join("sub/included.txt"), "included").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: true,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.join("sub")], &options);
-        // Should have .gitignore and included.txt (ignored.txt is excluded)
-        assert_eq!(result.paths.len(), 2);
-        assert!(result
-            .paths
-            .iter()
-            .any(|path| path.ends_with("included.txt")));
-        assert!(!result
-            .paths
-            .iter()
-            .any(|path| path.ends_with("ignored.txt")));
-    }
-
-    #[test]
-    fn includes_gitignored_when_disabled() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::create_dir(root.join("sub")).unwrap();
-        std::fs::write(root.join("sub/.gitignore"), "ignored.txt\n").unwrap();
-        std::fs::write(root.join("sub/ignored.txt"), "ignored").unwrap();
-        std::fs::write(root.join("sub/included.txt"), "included").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.join("sub")], &options);
-        // Should have all 3: .gitignore, ignored.txt, included.txt
-        assert_eq!(result.paths.len(), 3);
-        assert!(result
-            .paths
-            .iter()
-            .any(|path| path.ends_with("ignored.txt")));
-    }
-
-    #[test]
-    fn exclude_pattern_filters_walked_files() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::write(root.join("keep.rs"), "keep").unwrap();
-        std::fs::write(root.join("skip.txt"), "skip").unwrap();
-
-        let exclude = exclude_pattern("**/*.txt");
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-        assert_eq!(result.paths.len(), 1);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-        assert!(!result.paths.iter().any(|p| p.ends_with("skip.txt")));
-    }
-
-    #[test]
-    fn exclude_pattern_filters_explicit_files() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        let keep = root.join("keep.rs");
-        let skip = root.join("skip.txt");
-        std::fs::write(&keep, "keep").unwrap();
-        std::fs::write(&skip, "skip").unwrap();
-
-        let exclude = exclude_pattern("**/*.txt");
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[keep, skip], &options);
-        assert_eq!(result.paths.len(), 1);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-    }
-
-    #[test]
-    fn exclude_dotdir_pattern_without_leading_globstar() {
-        // Regression test: `.git/**` should exclude .git directory contents
-        // Previously failed when walker returned paths with "./" prefix
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::create_dir_all(root.join(".git/logs")).unwrap();
-        std::fs::write(root.join(".git/logs/HEAD"), "ref").unwrap();
-        std::fs::write(root.join("keep.rs"), "keep").unwrap();
-
-        let exclude = exclude_pattern(".git/**");
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-        assert_eq!(result.paths.len(), 1, "got: {:?}", result.paths);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-        assert!(!result
-            .paths
-            .iter()
-            .any(|p| p.to_string_lossy().contains(".git")));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn symlink_to_file_not_followed_by_default() {
-        use std::os::unix::fs::symlink;
-
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::write(root.join("real.txt"), "content").unwrap();
-        symlink(root.join("real.txt"), root.join("link.txt")).unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-
-        // Real file is included
-        assert!(result.paths.iter().any(|p| p.ends_with("real.txt")));
-        // Symlink is NOT followed by default (ignore crate behavior)
-        assert!(!result.paths.iter().any(|p| p.ends_with("link.txt")));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn symlink_to_parent_dir_does_not_loop() {
-        use std::os::unix::fs::symlink;
-
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::create_dir(root.join("sub")).unwrap();
-        std::fs::write(root.join("sub/file.txt"), "content").unwrap();
-        // Create symlink pointing back to parent - could cause infinite loop
-        symlink(root, root.join("sub/parent_link")).unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        // This should complete without hanging (ignore crate doesn't follow dir symlinks)
-        let result = expand_paths(&[root.to_path_buf()], &options);
-
-        // Should find the file but not loop infinitely
-        assert!(result.paths.iter().any(|p| p.ends_with("file.txt")));
-        // The symlink itself is not a file, so it won't appear in paths
-    }
-
-    #[test]
-    fn hardcoded_excludes_filter_loq_cache_dir() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::write(root.join("keep.rs"), "keep").unwrap();
-        std::fs::create_dir(root.join(".loq_cache")).unwrap();
-        std::fs::write(root.join(".loq_cache/cached.txt"), "cached").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-        assert_eq!(result.paths.len(), 1);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-        assert!(!result
-            .paths
-            .iter()
-            .any(|p| p.to_string_lossy().contains(".loq_cache")));
-    }
-
-    #[test]
-    fn hardcoded_excludes_filter_loq_toml() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        std::fs::write(root.join("keep.rs"), "keep").unwrap();
-        std::fs::write(root.join("loq.toml"), "[config]").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        let result = expand_paths(&[root.to_path_buf()], &options);
-        assert_eq!(result.paths.len(), 1);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-        assert!(!result.paths.iter().any(|p| p.ends_with("loq.toml")));
-    }
-
-    #[test]
-    fn hardcoded_excludes_filter_explicit_loq_toml() {
-        let temp = TempDir::new().unwrap();
-        let root = temp.path();
-        let keep = root.join("keep.rs");
-        let loq_toml = root.join("loq.toml");
-        std::fs::write(&keep, "keep").unwrap();
-        std::fs::write(&loq_toml, "[config]").unwrap();
-
-        let exclude = empty_exclude();
-        let options = WalkOptions {
-            respect_gitignore: false,
-            exclude: &exclude,
-            root_dir: root,
-        };
-        // Pass loq.toml explicitly - should still be filtered
-        let result = expand_paths(&[keep, loq_toml], &options);
-        assert_eq!(result.paths.len(), 1);
-        assert!(result.paths.iter().any(|p| p.ends_with("keep.rs")));
-    }
-}
+mod tests;

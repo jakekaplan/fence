@@ -39,14 +39,14 @@ pub enum Decision {
 /// Checks rules (last match wins), then falls back to default.
 #[must_use]
 pub fn decide(config: &CompiledConfig, path: &str) -> Decision {
-    let mut matched: Option<(&CompiledRule, String)> = None;
+    let mut last_matching_rule: Option<(&CompiledRule, String)> = None;
     for rule in config.rules() {
         if let Some(pattern) = rule.matches(path) {
-            matched = Some((rule, pattern.to_string()));
+            last_matching_rule = Some((rule, pattern.to_string()));
         }
     }
 
-    if let Some((rule, pattern)) = matched {
+    if let Some((rule, pattern)) = last_matching_rule {
         return Decision::Check {
             limit: rule.max_lines,
             matched_by: MatchBy::Rule { pattern },

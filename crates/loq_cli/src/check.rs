@@ -279,7 +279,9 @@ mod tests {
         let mut stdout = NoColor::new(Vec::new());
         let output = loq_fs::CheckOutput {
             outcomes: vec![],
-            walk_errors: vec![WalkError("permission denied".into())],
+            walk_errors: vec![WalkError {
+                message: "permission denied".into(),
+            }],
             fix_guidance: None,
         };
         let _code =
@@ -316,7 +318,9 @@ mod tests {
                     kind: OutcomeKind::Binary,
                 },
             ],
-            walk_errors: vec![WalkError("permission denied".into())],
+            walk_errors: vec![WalkError {
+                message: "permission denied".into(),
+            }],
             fix_guidance: Some("Split large files.".to_string()),
         };
         let status =

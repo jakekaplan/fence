@@ -24,7 +24,7 @@ struct BaselineStats {
 }
 
 impl BaselineStats {
-    const fn is_empty(&self) -> bool {
+    const fn has_no_changes(&self) -> bool {
         self.added == 0 && self.updated == 0 && self.removed == 0
     }
 }
@@ -221,7 +221,7 @@ fn apply_baseline_changes(
 }
 
 fn write_stats<W: WriteColor>(writer: &mut W, stats: &BaselineStats) -> std::io::Result<()> {
-    if stats.is_empty() {
+    if stats.has_no_changes() {
         writeln!(writer, "No changes needed")?;
     } else {
         let mut parts = Vec::new();
@@ -267,19 +267,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stats_is_empty() {
+    fn stats_has_no_changes() {
         let empty = BaselineStats {
             added: 0,
             updated: 0,
             removed: 0,
         };
-        assert!(empty.is_empty());
+        assert!(empty.has_no_changes());
 
         let not_empty = BaselineStats {
             added: 1,
             updated: 0,
             removed: 0,
         };
-        assert!(!not_empty.is_empty());
+        assert!(!not_empty.has_no_changes());
     }
 }
