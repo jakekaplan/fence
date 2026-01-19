@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1768764810598,
+  "lastUpdate": 1768795588940,
   "repoUrl": "https://github.com/jakekaplan/loq",
   "entries": {
     "Benchmark": [
@@ -623,6 +623,54 @@ window.BENCHMARK_DATA = {
             "name": "ruff",
             "value": 0.12597729606000002,
             "range": "± 0.0023",
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "40362401+jakekaplan@users.noreply.github.com",
+            "name": "Jake Kaplan",
+            "username": "jakekaplan"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d600992b36ce52cb86a7af597d580169c9259c59",
+          "message": "Merge pull request #33 from jakekaplan/add-release-scripts\n\nAdd release scripts",
+          "timestamp": "2026-01-18T23:05:35-05:00",
+          "tree_id": "fb27b57629986f5faf6ca07f2511664d69a8a250",
+          "url": "https://github.com/jakekaplan/loq/commit/d600992b36ce52cb86a7af597d580169c9259c59"
+        },
+        "date": 1768795588682,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cpython",
+            "value": 0.053392845060000006,
+            "range": "± 0.0039",
+            "unit": "seconds"
+          },
+          {
+            "name": "airflow",
+            "value": 0.14550399256,
+            "range": "± 0.0018",
+            "unit": "seconds"
+          },
+          {
+            "name": "prefect",
+            "value": 0.06112902856,
+            "range": "± 0.0007",
+            "unit": "seconds"
+          },
+          {
+            "name": "ruff",
+            "value": 0.12826274716,
+            "range": "± 0.001",
             "unit": "seconds"
           }
         ]
